@@ -1,0 +1,31 @@
+#!/bin/sh
+# clawdex-statusline — Claude Code statusline plugin that doubles as a heartbeat
+# for the clawdex daemon. Claude Code calls this every ~300ms while the agent
+# is active, with a JSON payload describing the current session state.
+#
+# Two jobs:
+#   1. Print a tiny statusline (one line) — required by Claude Code.
+#   2. Send a heartbeat tick to the clawdex daemon so it knows the agent is
+#      still alive. The daemon falls back to "idle" if heartbeats stop.
+#
+# Wire into ~/.claude/settings.json: "statusLine": { "type": "command",
+# "command": "/path/to/clawdex-statusline" }.
+
+SOCK="${CLAWDEX_SOCK:-$HOME/.clawdex/sock}"
+PAYLOAD="$(cat)"
+
+# Best-effort heartbeat — fire and forget. Daemon uses this to detect that
+# the agent is still alive (vs crashed mid-tool-call leaving us stuck on row 7).
+if [ -S "$SOCK" ]; then
+  TS="$(date +%s)"
+  printf '{"event":"heartbeat","ts":%d}\n' "$TS" | nc -U "$SOCK" >/dev/null 2>&1 &
+  disown 2>/dev/null || true
+fi
+
+# Minimal statusline. Users can replace with their own — clawdex only needs
+# the side-effect heartbeat. Default surfaces model + cwd basename.
+MODEL="$(printf '%s' "$PAYLOAD" | tr -d '\n' | sed -n 's/.*"display_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)"
+CWD="$(printf '%s' "$PAYLOAD" | tr -d '\n' | sed -n 's/.*"current_dir"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)"
+DIR_BASE="${CWD##*/}"
+
+printf '🐾 %s · %s' "${MODEL:-claude}" "${DIR_BASE:-~}"

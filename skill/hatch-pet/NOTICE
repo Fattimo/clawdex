@@ -1,0 +1,17 @@
+clawdex — hatch-pet skill (Claude Code edition)
+Copyright 2026 the clawdex contributors
+
+This product includes work derived from the hatch-pet skill in
+openai/skills (https://github.com/openai/skills), licensed under the
+Apache License, Version 2.0.
+
+  Copyright OpenAI
+  Licensed under the Apache License, Version 2.0
+
+Files derived (verbatim or substantially) from openai/skills:
+- validate_atlas.py — verbatim copy
+- SKILL.md — substantially rewritten; specification tables and effect
+  guidance are paraphrased/quoted from upstream.
+- references material in this skill cites
+  openai/skills/.curated/hatch-pet/references/animation-rows.md and
+  codex-pet-contract.md.

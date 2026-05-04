@@ -1,0 +1,90 @@
+#!/bin/sh
+# clawdex-hook — translate Claude Code hook events to clawdex animation rows.
+#
+# Wired into ~/.claude/settings.json under "hooks". Reads the hook payload
+# (JSON) on stdin, picks an animation row, and sends a one-line event to the
+# clawdex daemon's Unix socket. Never blocks: any failure exits 0 silently so
+# Claude Code never waits on the pet.
+#
+# Animation rows are defined by openai/skills hatch-pet (animation-rows.md):
+#   0 idle  1 running-right  2 running-left  3 waving  4 jumping
+#   5 failed  6 waiting  7 running  8 review
+
+SOCK="${CLAWDEX_SOCK:-$HOME/.clawdex/sock}"
+
+# Read all stdin (Claude Code passes the hook payload as JSON).
+PAYLOAD="$(cat)"
+
+# Tiny JSON field extractor. Avoids a jq dependency — clawdex must work on
+# any user's machine. Pulls a top-level string field by name.
+json_get() {
+  printf '%s' "$PAYLOAD" \
+    | tr -d '\n' \
+    | sed -n 's/.*"'"$1"'"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
+    | head -n1
+}
+
+# Numeric/boolean field (best-effort — only used for tool_response.success-ish).
+json_get_raw() {
+  printf '%s' "$PAYLOAD" \
+    | tr -d '\n' \
+    | sed -n 's/.*"'"$1"'"[[:space:]]*:[[:space:]]*\([^,}]*\).*/\1/p' \
+    | head -n1
+}
+
+EVENT="$(json_get hook_event_name)"
+TOOL="$(json_get tool_name)"
+
+# State translation — see docs/state-mapping.md for rationale.
+ROW=0
+MODE=transient    # transient: play once, daemon returns to idle. sticky: hold.
+TTL=0             # ms; 0 = use row's natural duration.
+
+case "$EVENT" in
+  SessionStart)
+    ROW=3; MODE=transient ;;                    # waving — hello
+  UserPromptSubmit)
+    ROW=8; MODE=sticky; TTL=2000 ;;             # review — thinking
+  PreToolUse)
+    case "$TOOL" in
+      Bash|Edit|Write|MultiEdit|NotebookEdit)
+        ROW=7; MODE=sticky ;;                   # running — doing work
+      Read|Grep|Glob|WebFetch|WebSearch)
+        ROW=8; MODE=sticky ;;                   # review — searching/reading
+      *)
+        ROW=7; MODE=sticky ;;
+    esac ;;
+  PostToolUse)
+    # Don't fight other state — let UserPromptSubmit's "review" or Stop's
+    # "waving" take over. Send a soft "release sticky" hint.
+    ROW=-1; MODE=release ;;
+  Notification)
+    ROW=6; MODE=sticky ;;                       # waiting — permission prompt
+  Stop|SubagentStop)
+    # Use stop_hook_active to detect agent finishing without error.
+    ROW=3; MODE=transient ;;                    # waving — done (success path)
+  PreCompact)
+    ROW=8; MODE=sticky; TTL=1500 ;;             # review — compacting context
+  *)
+    exit 0 ;;
+esac
+
+# Compose the daemon message. JSON line, easy to debug with `nc -lU`.
+TS="$(date +%s)"
+MSG="{\"event\":\"$EVENT\",\"tool\":\"$TOOL\",\"row\":$ROW,\"mode\":\"$MODE\",\"ttl\":$TTL,\"ts\":$TS}"
+
+# Best-effort send. If the daemon isn't running, exit silently. Use a short
+# timeout via the OS rather than nc flags (varies between BSD nc and ncat).
+if [ -S "$SOCK" ]; then
+  printf '%s\n' "$MSG" | nc -U "$SOCK" >/dev/null 2>&1 &
+  # Reap in background; never wait. Detach so Claude Code doesn't block.
+  disown 2>/dev/null || true
+fi
+
+# Trail log — first thing to check when "is the pet getting events?" comes up.
+# Toggle off by setting CLAWDEX_NO_TRAIL=1 in your shell env.
+if [ -z "$CLAWDEX_NO_TRAIL" ] && [ -d "$HOME/.clawdex" ]; then
+  printf '%s %s\n' "$(date +%H:%M:%S)" "$MSG" >> "$HOME/.clawdex/hook-trail.log"
+fi
+
+exit 0

@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>clawdex — Codex pet renderer</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<style>
+  :root {
+    --bg: #0b0b0d;
+    --panel: #15151a;
+    --line: #2a2a33;
+    --text: #e7e7ee;
+    --dim: #8a8a96;
+    --accent: #d97757;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 14px ui-sans-serif, system-ui, -apple-system, sans-serif; }
+  header { padding: 16px 20px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 12px; }
+  header h1 { font-size: 14px; margin: 0; letter-spacing: 0.5px; }
+  header .sub { color: var(--dim); font-size: 12px; }
+  main { display: grid; grid-template-columns: 320px 1fr; min-height: calc(100% - 53px); }
+  aside { padding: 16px; border-right: 1px solid var(--line); display: flex; flex-direction: column; gap: 16px; overflow: auto; }
+  section.stage { display: grid; place-items: center; padding: 24px; position: relative; }
+  .drop {
+    border: 1px dashed var(--line); border-radius: 8px; padding: 16px; text-align: center;
+    color: var(--dim); cursor: pointer; transition: border-color .15s, color .15s;
+  }
+  .drop:hover, .drop.over { border-color: var(--accent); color: var(--text); }
+  .drop input { display: none; }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--dim); }
+  .field input, .field select {
+    background: var(--panel); border: 1px solid var(--line); color: var(--text);
+    padding: 8px 10px; border-radius: 6px; font: inherit;
+  }
+  .row-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .row-grid button {
+    background: var(--panel); border: 1px solid var(--line); color: var(--text);
+    padding: 8px; border-radius: 6px; font: inherit; cursor: pointer; text-align: left;
+  }
+  .row-grid button:hover { border-color: var(--accent); }
+  .row-grid button.active { border-color: var(--accent); color: var(--accent); }
+  .row-grid button .num { color: var(--dim); margin-right: 6px; font-variant-numeric: tabular-nums; }
+  .pet-canvas {
+    image-rendering: pixelated; image-rendering: crisp-edges;
+    width: 384px; height: 416px;
+    background-image: var(--sheet);
+    background-size: 3072px 3744px;
+    background-repeat: no-repeat;
+    background-position: 0 0;
+  }
+  .meta { font-size: 12px; color: var(--dim); position: absolute; bottom: 16px; left: 24px; }
+  .meta b { color: var(--text); }
+  .info { font-size: 12px; color: var(--dim); line-height: 1.5; }
+  .info code { background: var(--panel); padding: 1px 5px; border-radius: 3px; color: var(--text); }
+  .empty { color: var(--dim); font-size: 13px; text-align: center; }
+  .empty strong { color: var(--text); display: block; margin-bottom: 6px; }
+  details summary { cursor: pointer; color: var(--dim); font-size: 12px; }
+  details pre { background: var(--panel); border: 1px solid var(--line); padding: 10px; border-radius: 6px; font-size: 11px; overflow: auto; max-height: 200px; }
+  .scale-row { display: flex; gap: 8px; align-items: center; }
+  .scale-row input[type=range] { flex: 1; }
+  .scale-row span { color: var(--dim); font-variant-numeric: tabular-nums; min-width: 36px; text-align: right; }
+</style>
+</head>
+<body>
+<header>
+  <h1>clawdex</h1>
+  <span class="sub">Codex pet renderer · spec verifier · state preview</span>
+</header>
+<main>
+  <aside>
+    <label class="drop" id="drop">
+      <input type="file" id="files" multiple accept=".json,.png,.webp,image/png,image/webp,application/json" />
+      <div><strong>Drop a Codex pet folder</strong></div>
+      <div style="margin-top: 4px; font-size: 12px;">or click to pick <code>pet.json</code> + spritesheet</div>
+    </label>
+    <div id="loaded" class="info" style="display:none;"></div>
+    <div class="field">
+      <label>Animation row</label>
+      <div class="row-grid" id="rows"></div>
+    </div>
+    <div class="field">
+      <label>Render scale</label>
+      <div class="scale-row">
+        <input type="range" id="scale" min="1" max="4" step="0.5" value="2" />
+        <span id="scaleVal">2.0×</span>
+      </div>
+    </div>
+    <details>
+      <summary>pet.json</summary>
+      <pre id="manifest">(no manifest loaded)</pre>
+    </details>
+    <div class="info">
+      Atlas spec: 1536×1872 · 8 cols × 9 rows · 192×208 cell · transparent.
+      Frame durations from <code>animation-rows.md</code>.
+    </div>
+  </aside>
+  <section class="stage">
+    <div id="stage" class="empty">
+      <strong>No pet loaded</strong>
+      Drop a <code>pet.json</code> + matching <code>spritesheet.webp</code> (or .png) on the left.
+    </div>
+    <div class="meta" id="meta"></div>
+  </section>
+</main>
+
+<script>
+  // Spec from openai/skills/.curated/hatch-pet/references/animation-rows.md
+  const ROWS = [
+    { name: "idle",          cols: 6, durations: [280, 110, 110, 140, 140, 320] },
+    { name: "running-right", cols: 8, durations: [120, 120, 120, 120, 120, 120, 120, 220] },
+    { name: "running-left",  cols: 8, durations: [120, 120, 120, 120, 120, 120, 120, 220] },
+    { name: "waving",        cols: 4, durations: [140, 140, 140, 280] },
+    { name: "jumping",       cols: 5, durations: [140, 140, 140, 140, 280] },
+    { name: "failed",        cols: 8, durations: [140, 140, 140, 140, 140, 140, 140, 240] },
+    { name: "waiting",       cols: 6, durations: [150, 150, 150, 150, 150, 260] },
+    { name: "running",       cols: 6, durations: [120, 120, 120, 120, 120, 220] },
+    { name: "review",        cols: 6, durations: [150, 150, 150, 150, 150, 280] },
+  ];
+
+  const CELL_W = 192, CELL_H = 208;
+  const ATLAS_W = 1536, ATLAS_H = 1872;
+
+  let manifest = null;
+  let sheetURL = null;
+  let activeRow = 0;
+  let frameIdx = 0;
+  let frameTimer = null;
+  let scale = 2;
+
+  const stage = document.getElementById("stage");
+  const meta = document.getElementById("meta");
+  const rowsEl = document.getElementById("rows");
+  const drop = document.getElementById("drop");
+  const filesInput = document.getElementById("files");
+  const loaded = document.getElementById("loaded");
+  const manifestEl = document.getElementById("manifest");
+  const scaleEl = document.getElementById("scale");
+  const scaleVal = document.getElementById("scaleVal");
+
+  // Build row buttons
+  ROWS.forEach((r, i) => {
+    const b = document.createElement("button");
+    b.innerHTML = `<span class="num">${i}</span>${r.name}`;
+    b.onclick = () => setRow(i);
+    b.dataset.row = i;
+    rowsEl.appendChild(b);
+  });
+
+  function setRow(i) {
+    activeRow = i;
+    frameIdx = 0;
+    [...rowsEl.children].forEach((el, idx) => el.classList.toggle("active", idx === i));
+    scheduleFrame();
+    renderMeta();
+  }
+
+  function scheduleFrame() {
+    if (frameTimer) clearTimeout(frameTimer);
+    if (!sheetURL) return;
+    const row = ROWS[activeRow];
+    paint();
+    const dur = row.durations[frameIdx];
+    frameTimer = setTimeout(() => {
+      frameIdx = (frameIdx + 1) % row.cols;
+      scheduleFrame();
+    }, dur);
+  }
+
+  function paint() {
+    if (!sheetURL) return;
+    const canvas = document.getElementById("petCanvas");
+    if (!canvas) return;
+    const x = -(frameIdx * CELL_W) * scale;
+    const y = -(activeRow * CELL_H) * scale;
+    canvas.style.backgroundPosition = `${x}px ${y}px`;
+  }
+
+  function ensureCanvas() {
+    if (document.getElementById("petCanvas")) return;
+    stage.classList.remove("empty");
+    stage.innerHTML = `<div class="pet-canvas" id="petCanvas"></div>`;
+    applyScale();
+  }
+
+  function applyScale() {
+    const canvas = document.getElementById("petCanvas");
+    if (!canvas) return;
+    canvas.style.width = (CELL_W * scale) + "px";
+    canvas.style.height = (CELL_H * scale) + "px";
+    canvas.style.backgroundSize = (ATLAS_W * scale) + "px " + (ATLAS_H * scale) + "px";
+    canvas.style.backgroundImage = `url("${sheetURL}")`;
+    paint();
+  }
+
+  function renderMeta() {
+    if (!manifest) { meta.textContent = ""; return; }
+    const r = ROWS[activeRow];
+    meta.innerHTML = `<b>${manifest.displayName || manifest.id}</b> · row ${activeRow} <i>${r.name}</i> · frame ${frameIdx + 1}/${r.cols}`;
+  }
+
+  scaleEl.oninput = () => {
+    scale = parseFloat(scaleEl.value);
+    scaleVal.textContent = scale.toFixed(1) + "×";
+    applyScale();
+  };
+
+  // File handling
+  function handleFiles(fileList) {
+    const files = [...fileList];
+    const json = files.find(f => f.name.toLowerCase().endsWith(".json"));
+    const sheet = files.find(f => /\.(webp|png)$/i.test(f.name));
+    if (!json || !sheet) {
+      alert("Please drop both pet.json and spritesheet.webp (or .png).");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      try { manifest = JSON.parse(reader.result); }
+      catch (e) { alert("Invalid pet.json: " + e.message); return; }
+      manifestEl.textContent = JSON.stringify(manifest, null, 2);
+      if (sheetURL) URL.revokeObjectURL(sheetURL);
+      sheetURL = URL.createObjectURL(sheet);
+      const img = new Image();
+      img.onload = () => {
+        loaded.style.display = "block";
+        const sizeOk = img.naturalWidth === ATLAS_W && img.naturalHeight === ATLAS_H;
+        loaded.innerHTML = `Loaded <b>${manifest.displayName || manifest.id}</b><br>` +
+          `Atlas: ${img.naturalWidth}×${img.naturalHeight} ${sizeOk ? "✓" : "<span style=color:#d97757>· expected 1536×1872</span>"}`;
+        ensureCanvas();
+        setRow(0);
+      };
+      img.src = sheetURL;
+    };
+    reader.readAsText(json);
+  }
+
+  filesInput.onchange = e => handleFiles(e.target.files);
+  drop.ondragover = e => { e.preventDefault(); drop.classList.add("over"); };
+  drop.ondragleave = () => drop.classList.remove("over");
+  drop.ondrop = async e => {
+    e.preventDefault();
+    drop.classList.remove("over");
+    const items = [...e.dataTransfer.items];
+    const files = [];
+    for (const item of items) {
+      const entry = item.webkitGetAsEntry?.();
+      if (entry?.isDirectory) {
+        await new Promise(res => {
+          const r = entry.createReader();
+          r.readEntries(entries => Promise.all(
+            entries.map(en => new Promise(rr => en.file ? en.file(f => { files.push(f); rr(); }) : rr()))
+          ).then(res));
+        });
+      } else if (item.kind === "file") {
+        files.push(item.getAsFile());
+      }
+    }
+    handleFiles(files);
+  };
+</script>
+</body>
+</html>

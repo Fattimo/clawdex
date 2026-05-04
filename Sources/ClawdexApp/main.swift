@@ -1,0 +1,89 @@
+import AppKit
+import Foundation
+
+// clawdex daemon entry point. Brings up:
+//   - an NSApplication (no menu bar — we set LSUIElement-equivalent at runtime).
+//   - a floating PetWindow.
+//   - a Unix socket listener at ~/.clawdex/sock.
+//   - a state machine that translates incoming events to (row, frame) ticks.
+
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    private var window: PetWindow!
+    private var server: SocketServer!
+    private var machine: StateMachine!
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        // Hide from Dock & Cmd-Tab. LSUIElement set programmatically since we ship
+        // a single binary without an Info.plist app bundle.
+        NSApp.setActivationPolicy(.accessory)
+
+        window = PetWindow()
+
+        // Pick first available pet. If user prefers a specific one, ClawdexCLI
+        // can send a "select" event over the socket later.
+        let pets = PetLibrary.discover()
+        if let first = pets.first {
+            window.loadPet(first)
+            NSLog("clawdex: loaded pet '\(first.0.displayName)' from \(first.1.deletingLastPathComponent().path)")
+        } else {
+            NSLog("clawdex: no pets found in ~/.codex/pets or ~/.clawdex/pets — install one with `npx petdex install <name>` or use the hatch-pet skill.")
+        }
+
+        machine = StateMachine { [weak self] row in
+            DispatchQueue.main.async { self?.window.setRow(row) }
+        }
+
+        let sockPath = ProcessInfo.processInfo.environment["CLAWDEX_SOCK"]
+            ?? (NSHomeDirectory() + "/.clawdex/sock")
+        server = SocketServer(path: sockPath) { [weak self] line in
+            self?.handleSocketLine(line)
+        }
+        do {
+            try server.start()
+            NSLog("clawdex: listening on \(sockPath)")
+        } catch {
+            NSLog("clawdex: failed to bind socket \(sockPath): \(error)")
+        }
+
+        window.wake()
+        // Hello on first launch — routed through the state machine so it
+        // properly returns to idle after the wave cycle. Direct setRow calls
+        // would bypass the machine and leave us stuck.
+        machine.ingest(#"{"event":"startup","tool":"","row":3,"mode":"transient","ttl":0,"ts":0}"#)
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        server?.stop()
+    }
+
+    /// CLI commands are sent as JSON over the same socket as hook events. We
+    /// dispatch known control verbs here, and forward everything else to the
+    /// state machine.
+    private func handleSocketLine(_ line: String) {
+        if let data = line.data(using: .utf8),
+           let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let verb = obj["control"] as? String {
+            DispatchQueue.main.async { [weak self] in
+                switch verb {
+                case "wake": self?.window.wake()
+                case "tuck": self?.window.tuck()
+                case "select":
+                    if let id = obj["id"] as? String {
+                        let pets = PetLibrary.discover()
+                        if let match = pets.first(where: { $0.0.id == id }) {
+                            self?.window.loadPet(match)
+                        }
+                    }
+                default: break
+                }
+            }
+            return
+        }
+        machine.ingest(line)
+    }
+}
+
+let app = NSApplication.shared
+let delegate = AppDelegate()
+app.delegate = delegate
+app.run()

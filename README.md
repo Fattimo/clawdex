@@ -48,14 +48,18 @@ clawdex wake
 
 `clawdex` reads pets from `~/.codex/pets/` and `~/.clawdex/pets/`. **Existing Codex pets work unmodified.**
 
-Three ways to get one:
+The fastest way to get one is [petdex](https://github.com/crafter-station/petdex), the community catalog of 467+ Codex-compatible pets:
 
-1. **petdex** (community catalog of Codex pets):
-   ```bash
-   npx petdex install noir-webling
-   ```
-2. **Hatch one in Claude Code.** Drop the `skill/hatch-pet/` folder into your skills directory and ask Claude `hatch a pet that looks like a snow leopard with a tiny laptop`.
-3. **Drag-drop your own atlas** at [the web renderer](web/index.html) to verify it works, then copy to `~/.codex/pets/<name>/`.
+```bash
+npx petdex install noir-webling     # a noir-detective spider
+npx petdex install lil-finder-guy   # one of the popular ones
+```
+
+Or browse [petdex.crafter.run](https://petdex.crafter.run) to pick.
+
+Already have your own atlas? Drag-drop the `pet.json` + `spritesheet.webp` pair onto [the web renderer](web/index.html) to validate it against the spec, then copy to `~/.codex/pets/<name>/`.
+
+The bundled `skill/hatch-pet/` is the format reference + atlas validator (`validate_atlas.py`). It does not generate sprite images itself — bring your own image-gen tool (MidJourney, DALL-E, hand-drawn pixel art) and use the per-row prompts in [`SKILL.md`](skill/hatch-pet/SKILL.md).
 
 ## How it works
 

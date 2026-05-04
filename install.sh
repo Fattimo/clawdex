@@ -125,9 +125,25 @@ echo "  Daemon binary:  $DAEMON_BIN"
 echo "  Hooks:          $HOOKS_DIR"
 echo "  Settings:       $SETTINGS"
 echo "  Logs:           $CLAWDEX_HOME/clawdexd.log"
+
+# Friendly nudge if the user has no pets yet — they'll otherwise see nothing.
+PET_COUNT=0
+for root in "$HOME/.codex/pets" "$HOME/.clawdex/pets"; do
+  [ -d "$root" ] && PET_COUNT=$((PET_COUNT + $(find "$root" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')))
+done
+
 echo ""
-echo "  Try:"
-echo "    clawdex list          # see your pets"
-echo "    clawdex wake          # show the pet"
-echo "    clawdex tuck          # hide it"
-echo "    npx petdex install noir-webling     # grab a sample pet"
+if [ "$PET_COUNT" = "0" ]; then
+  echo "  No pets installed yet. Browse the catalog at https://petdex.crafter.run"
+  echo "  or grab one now:"
+  echo ""
+  echo "    npx petdex install noir-webling"
+  echo ""
+  echo "  Then:"
+  echo "    clawdex wake"
+else
+  echo "  Try:"
+  echo "    clawdex list   # $PET_COUNT pet(s) installed"
+  echo "    clawdex wake   # show the pet"
+  echo "    clawdex tuck   # hide it"
+fi

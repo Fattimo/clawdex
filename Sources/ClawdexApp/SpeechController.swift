@@ -42,8 +42,23 @@ final class SpeechController {
                 source: String?, root: String?) {
         let src = (source ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
 
+        // A user prompt (or session start) begins a NEW turn: there's no new
+        // assistant prose yet, and the transcript's latest assistant text is the
+        // PREVIOUS answer. Prime the dedup with it so it never echoes, and only
+        // show narration ("thinking…").
+        let newTurn = (event == "UserPromptSubmit" || event == "SessionStart")
+        if newTurn, let path = transcriptPath, !path.isEmpty,
+           let prose = Self.latestAssistantText(path: path) {
+            lastProse[src] = prose
+        }
+
+        // Prose can only have appeared on events that follow Claude writing text.
+        let proseEvent = (event == "PreToolUse" || event == "PostToolUse"
+                          || event == "Stop" || event == "SubagentStop"
+                          || event == "PreCompact")
+
         var toShow: String?
-        if let path = transcriptPath, !path.isEmpty,
+        if proseEvent, let path = transcriptPath, !path.isEmpty,
            let prose = Self.latestAssistantText(path: path), prose != lastProse[src] {
             lastProse[src] = prose
             toShow = prose

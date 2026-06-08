@@ -116,8 +116,10 @@ final class SpeechController {
             self.relayout()
             bubble.window.fadeIn()
 
-            // Hold long enough to read: ~60ms/char, clamped to [2.2s, 9s].
-            let ttl = max(2.2, min(9.0, Double(text.count) * 0.06))
+            // Hold long enough to read: ~60ms/char. Final turn messages prompt
+            // further action, so they linger; filler clears quickly.
+            let ttl = isFinal ? max(15.0, min(30.0, Double(text.count) * 0.06))
+                              : max(2.2, min(9.0, Double(text.count) * 0.06))
             bubble.timer = Timer.scheduledTimer(withTimeInterval: ttl, repeats: false) { [weak self] _ in
                 self?.expire(source: source)
             }

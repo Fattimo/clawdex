@@ -32,9 +32,29 @@ json_get_raw() {
     | head -n1
 }
 
+basename_of() { printf '%s' "${1##*/}"; }
+
+# Resolve the project root ("the root of it all"). Claude's cwd follows the
+# agent's `cd`s, so it can be deep inside a repo (e.g. .../backend/go/src/pylon).
+# Walk up to the nearest .git so the label + click-to-open target the repo root.
+# Falls back to the original dir if it isn't in a repo.
+find_root() {
+  d="$1"
+  while [ -n "$d" ] && [ "$d" != "/" ]; do
+    [ -e "$d/.git" ] && { printf '%s' "$d"; return; }
+    d="$(dirname "$d")"
+  done
+  printf '%s' "$1"
+}
+
 EVENT="$(json_get hook_event_name)"
 TOOL="$(json_get tool_name)"
 TRANSCRIPT="$(json_get transcript_path)"
+# Project the event came from. CWD is the agent's live working dir; ROOT is the
+# repo root we actually want to label by and open on click; SOURCE is its name.
+CWD="$(json_get cwd)"
+ROOT="$(find_root "$CWD")"
+SOURCE="$(basename_of "$ROOT")"
 
 # JSON-escape a string for embedding in our one-line message. No jq — pure
 # sed/tr. Backslash first, then quote, then strip control chars.
@@ -54,8 +74,6 @@ json_escape_short() {
 json_escape_stdin() {
   sed 's/\\/\\\\/g; s/"/\\"/g' | tr -d '\n\r\t'
 }
-
-basename_of() { printf '%s' "${1##*/}"; }
 
 # State translation — see docs/state-mapping.md for rationale.
 ROW=0
@@ -97,30 +115,32 @@ esac
 NARRATION=""
 case "$EVENT" in
   UserPromptSubmit)
-    NARRATION="💭 thinking…" ;;
+    NARRATION="thinking…" ;;
   PreToolUse)
     case "$TOOL" in
       Bash)
-        NARRATION="⚡ $(json_get command)" ;;
+        NARRATION="$(json_get command)" ;;
       Edit|Write|MultiEdit|NotebookEdit)
-        NARRATION="✏️ $(basename_of "$(json_get file_path)")" ;;
+        NARRATION="Editing $(basename_of "$(json_get file_path)")" ;;
       Read)
-        NARRATION="🔍 $(basename_of "$(json_get file_path)")" ;;
+        NARRATION="Reading $(basename_of "$(json_get file_path)")" ;;
       Grep)
-        NARRATION="🔍 $(json_get pattern)" ;;
+        NARRATION="Searching $(json_get pattern)" ;;
       Glob)
-        NARRATION="🔍 $(json_get pattern)" ;;
-      WebFetch|WebSearch)
-        NARRATION="🌐 $(json_get query)" ;;
+        NARRATION="Finding $(json_get pattern)" ;;
+      WebFetch)
+        NARRATION="Fetching a page" ;;
+      WebSearch)
+        NARRATION="Searching the web" ;;
       Task)
-        NARRATION="🤖 subagent…" ;;
+        NARRATION="Running a subagent…" ;;
       *)
-        NARRATION="⚡ $TOOL" ;;
+        NARRATION="$TOOL" ;;
     esac ;;
   Notification)
-    NARRATION="⏳ needs you" ;;
+    NARRATION="waiting for you" ;;
   PreCompact)
-    NARRATION="🗜️ compacting…" ;;
+    NARRATION="compacting…" ;;
   # SessionStart / Stop / SubagentStop: leave empty so the daemon shows the
   # latest real prose (the greeting / final answer) instead of a canned line.
 esac
@@ -129,7 +149,9 @@ esac
 TS="$(date +%s)"
 TEXT="$(json_escape_short "$NARRATION")"
 TRANSCRIPT_ESC="$(json_escape "$TRANSCRIPT")"
-MSG="{\"event\":\"$EVENT\",\"tool\":\"$TOOL\",\"row\":$ROW,\"mode\":\"$MODE\",\"ttl\":$TTL,\"text\":\"$TEXT\",\"transcript\":\"$TRANSCRIPT_ESC\",\"ts\":$TS}"
+SOURCE_ESC="$(json_escape_short "$SOURCE")"
+ROOT_ESC="$(json_escape "$ROOT")"
+MSG="{\"event\":\"$EVENT\",\"tool\":\"$TOOL\",\"row\":$ROW,\"mode\":\"$MODE\",\"ttl\":$TTL,\"text\":\"$TEXT\",\"transcript\":\"$TRANSCRIPT_ESC\",\"source\":\"$SOURCE_ESC\",\"root\":\"$ROOT_ESC\",\"ts\":$TS}"
 
 # Best-effort send. If the daemon isn't running, exit silently. Use a short
 # timeout via the OS rather than nc flags (varies between BSD nc and ncat).

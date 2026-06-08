@@ -87,7 +87,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // action narration. Independent of the row state machine.
         if let data = line.data(using: .utf8),
            let s = try? JSONDecoder().decode(SpeechLine.self, from: data) {
-            speech.handle(event: s.event ?? "", narration: s.text, transcriptPath: s.transcript)
+            speech.handle(event: s.event ?? "", narration: s.text,
+                          transcriptPath: s.transcript, source: s.source, root: s.root)
         }
 
         machine.ingest(line)
@@ -98,6 +99,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let event: String?
         let text: String?
         let transcript: String?
+        let source: String?
+        let root: String?
     }
 }
 

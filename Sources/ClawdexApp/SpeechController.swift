@@ -32,6 +32,25 @@ final class SpeechController {
     private let maxBubbles = 5
     private let gap: CGFloat = 6
 
+    /// Bank of contrasting, theme-adapting workspace colors. Each environment
+    /// (source) gets the next one, cycling — stable for the daemon's lifetime so
+    /// a project keeps its color.
+    private static let palette: [NSColor] = [
+        .systemBlue, .systemGreen, .systemOrange, .systemPurple,
+        .systemPink, .systemTeal, .systemIndigo, .systemRed,
+    ]
+    private var colorIndex = 0
+    private var colorBySource: [String: NSColor] = [:]
+
+    private func color(for source: String) -> NSColor {
+        guard !source.isEmpty else { return .clear }
+        if let c = colorBySource[source] { return c }
+        let c = Self.palette[colorIndex % Self.palette.count]
+        colorIndex += 1
+        colorBySource[source] = c
+        return c
+    }
+
     init(pet: PetWindow) {
         self.pet = pet
     }
@@ -66,10 +85,12 @@ final class SpeechController {
             toShow = n
         }
         guard let text = toShow else { return }
-        show(source: src, root: root ?? "", text: text)
+        // The final turn response arrives on Stop (agent done, ready to reprompt);
+        // everything else is filler and gets a muted treatment.
+        show(source: src, root: root ?? "", text: text, isFinal: event == "Stop")
     }
 
-    private func show(source: String, root: String, text raw: String) {
+    private func show(source: String, root: String, text raw: String, isFinal: Bool) {
         let text = Self.clean(raw)
         guard !text.isEmpty else { return }
         DispatchQueue.main.async { [weak self] in
@@ -90,7 +111,8 @@ final class SpeechController {
             }
             if !root.isEmpty { bubble.root = root }
 
-            bubble.size = bubble.window.setContent(source: source, message: text)
+            bubble.size = bubble.window.setContent(source: source, message: text,
+                                                   isFinal: isFinal, accent: self.color(for: source))
             self.relayout()
             bubble.window.fadeIn()
 
@@ -136,18 +158,23 @@ final class SpeechController {
         relayout()
     }
 
-    /// Stack the live bubbles above the pet, oldest nearest the pet.
+    /// Stack the live bubbles above the pet, all sharing one left edge so they
+    /// line up instead of each centering on its own width.
     private func relayout() {
         guard let pet = pet else { return }
         let pf = pet.frame
-        let visible = (pet.screen ?? NSScreen.main)?.visibleFrame
+        let widest = order.compactMap { bubbles[$0]?.size.width }.max() ?? 0
+
+        // Common left anchor near the pet, clamped so even the widest bubble
+        // stays on-screen.
+        var x = pf.minX
+        if let v = (pet.screen ?? NSScreen.main)?.visibleFrame {
+            x = min(max(x, v.minX + 4), v.maxX - widest - 4)
+        }
+
         var y = pf.maxY + gap
         for source in order {
             guard let b = bubbles[source] else { continue }
-            var x = pf.midX - b.size.width / 2
-            if let v = visible {
-                x = min(max(x, v.minX + 4), v.maxX - b.size.width - 4)
-            }
             b.window.setFrameOrigin(NSPoint(x: x, y: y))
             y += b.size.height + gap
         }

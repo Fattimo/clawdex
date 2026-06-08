@@ -62,15 +62,19 @@ final class SpeechBubbleWindow: NSPanel {
     /// Set the bubble's `[source] message` content and resize to fit. Returns
     /// the resulting bubble size.
     @discardableResult
-    func setContent(source: String, message: String) -> NSSize {
-        let attr = Self.attributed(source: source, message: message)
-        label.attributedStringValue = attr
+    func setContent(source: String, message: String, isFinal: Bool, accent: NSColor) -> NSSize {
+        bubble.isFinal = isFinal
+        bubble.accentColor = accent
+        label.attributedStringValue = Self.attributed(source: source, message: message,
+                                                       isFinal: isFinal, accent: accent)
+        label.preferredMaxLayoutWidth = maxTextWidth
 
-        let bounding = attr.boundingRect(
-            with: NSSize(width: maxTextWidth, height: .greatestFiniteMagnitude),
-            options: [.usesLineFragmentOrigin, .usesFontLeading])
-        let tw = min(maxTextWidth, ceil(bounding.width))
-        let th = min(ceil(bounding.height), CGFloat(maxLines) * lineHeight)
+        // Size from the field's own fitting size — boundingRect underestimates
+        // the cell's line-fragment padding and clips short messages with an
+        // ellipsis. +1 guards against rounding.
+        let fit = label.fittingSize
+        let tw = min(maxTextWidth, ceil(fit.width) + 1)
+        let th = min(ceil(fit.height), CGFloat(maxLines) * lineHeight)
         let w = padL + tw + padR
         let h = th + padV * 2
 
@@ -82,8 +86,9 @@ final class SpeechBubbleWindow: NSPanel {
         return size
     }
 
-    /// `[source] ` in a dimmer weight, followed by the message in the body color.
-    static func attributed(source: String, message: String) -> NSAttributedString {
+    /// `[source] ` in the environment's accent color, followed by the message.
+    /// The final turn response uses the full body color; filler stays muted.
+    static func attributed(source: String, message: String, isFinal: Bool, accent: NSColor) -> NSAttributedString {
         let para = NSMutableParagraphStyle()
         para.lineBreakMode = .byWordWrapping
 
@@ -91,13 +96,13 @@ final class SpeechBubbleWindow: NSPanel {
         if !source.isEmpty {
             out.append(NSAttributedString(string: "[\(source)] ", attributes: [
                 .font: labelFont,
-                .foregroundColor: NSColor.secondaryLabelColor,
+                .foregroundColor: accent,
                 .paragraphStyle: para,
             ]))
         }
         out.append(NSAttributedString(string: message, attributes: [
             .font: font,
-            .foregroundColor: NSColor.labelColor,
+            .foregroundColor: isFinal ? NSColor.labelColor : NSColor.secondaryLabelColor,
             .paragraphStyle: para,
         ]))
         return out
@@ -126,8 +131,23 @@ final class SpeechBubbleWindow: NSPanel {
 /// top-right gutter and routes clicks: ✕ → onClose, anywhere else → onOpen.
 final class BubbleView: NSView {
     var closeSize: CGFloat = 16
+    var isFinal: Bool = true { didSet { needsDisplay = true } }
+    var accentColor: NSColor = .clear { didSet { needsDisplay = true } }
     var onOpen: (() -> Void)?
     var onClose: (() -> Void)?
+
+    // Solid (opaque) gray so nothing behind shows through. Final messages get a
+    // slightly brighter shade than filler. Adapts to light/dark.
+    private func backgroundGray() -> NSColor {
+        let dark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        if dark { return NSColor(white: isFinal ? 0.34 : 0.16, alpha: 1) }
+        return NSColor(white: isFinal ? 1.0 : 0.80, alpha: 1)
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsDisplay = true
+    }
 
     /// Top-right hit area for the ✕ (AppKit y-up coords).
     private func closeRect() -> NSRect {
@@ -139,9 +159,20 @@ final class BubbleView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         let r = bounds.insetBy(dx: 0.5, dy: 0.5)
         let path = NSBezierPath(roundedRect: r, xRadius: 10, yRadius: 10)
-        NSColor.windowBackgroundColor.withAlphaComponent(0.96).setFill()
+        backgroundGray().setFill()
         path.fill()
-        NSColor.separatorColor.withAlphaComponent(0.6).setStroke()
+
+        // Colored left accent bar marking the environment. Clipped to the
+        // rounded body so it follows the left corners.
+        if accentColor.alphaComponent > 0 {
+            NSGraphicsContext.saveGraphicsState()
+            path.addClip()
+            accentColor.setFill()
+            NSRect(x: 0, y: 0, width: 4, height: bounds.height).fill()
+            NSGraphicsContext.restoreGraphicsState()
+        }
+
+        NSColor.separatorColor.setStroke()
         path.lineWidth = 1
         path.stroke()
 

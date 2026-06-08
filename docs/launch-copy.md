@@ -10,9 +10,9 @@ Drafts for the announcement. Pick whichever lands.
 > OpenAI cloned the format and shipped pets.
 > So I cloned pets back.
 >
-> `brew install clawdex` — your Codex pet, but it's actually watching Claude Code work.
+> `git clone … && ./install.sh` — your Codex pet, but it's actually watching Claude Code work.
 >
-> github.com/danielkempe/clawdex
+> github.com/Fattimo/clawdex
 
 **v2 — the demo-first one**
 
@@ -22,7 +22,7 @@ Drafts for the announcement. Pick whichever lands.
 >
 > [GIF: Noir Webling in the corner, animating through review → running → waving as Claude Code edits a file]
 >
-> github.com/danielkempe/clawdex
+> github.com/Fattimo/clawdex
 
 **v3 — the spec-respecting one (for the HN crowd)**
 
@@ -30,7 +30,7 @@ Drafts for the announcement. Pick whichever lands.
 >
 > Result: every Codex pet now lives in Claude Code, reading from `~/.codex/pets/` directly. No format conversion, no fork, no second install.
 >
-> github.com/danielkempe/clawdex
+> github.com/Fattimo/clawdex
 
 ## Hacker News title
 
@@ -46,7 +46,7 @@ Drafts for the announcement. Pick whichever lands.
 >
 > State mapping: Claude Code's hook events (`PreToolUse`, `Stop`, `Notification`, etc.) drive the animation rows. Sticky vs transient modes so a long-running Bash holds the "running" row, while a finished task plays "waving" once and returns to idle. Heartbeat ticks via the statusline plugin so a crashed agent falls back to idle instead of frozen.
 >
-> Demo + code: github.com/danielkempe/clawdex
+> Demo + code: github.com/Fattimo/clawdex
 
 ## Show & tell screenshot caption
 

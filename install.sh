@@ -15,7 +15,7 @@ LAUNCH_AGENT="$HOME/Library/LaunchAgents/dev.clawdex.daemon.plist"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # Build from source if no binaries are present and we're inside a checkout.
-# When the formula installs us, the binaries are already in PATH.
+# If clawdexd is already on PATH (e.g. a prior install), we reuse it.
 if [ ! -x "$SCRIPT_DIR/.build/release/clawdexd" ] \
    && [ ! -x "$SCRIPT_DIR/.build/debug/clawdexd" ] \
    && ! command -v clawdexd >/dev/null 2>&1 \
@@ -44,7 +44,7 @@ if [ -z "$CLI_BIN" ]; then
 fi
 
 # Symlink the CLI into a writable PATH dir so `clawdex wake` works post-install.
-# Skip if a CLI is already on PATH (e.g. installed via Homebrew).
+# Skip if a CLI is already on PATH (e.g. a prior install).
 if ! command -v clawdex >/dev/null 2>&1 && [ -n "$CLI_BIN" ]; then
   for candidate in /opt/homebrew/bin /usr/local/bin "$HOME/.local/bin"; do
     if [ -d "$candidate" ] && [ -w "$candidate" ]; then

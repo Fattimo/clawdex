@@ -6,7 +6,6 @@
 #   - removes ~/.clawdex/ (hooks, logs, trail)
 # Does NOT touch:
 #   - ~/.codex/pets/ (your pets are yours)
-#   - clawdex installed via Homebrew (use `brew uninstall danielkempe/clawdex/clawdex` for that)
 
 set -e
 
@@ -69,7 +68,3 @@ echo ""
 echo "Left alone (yours, not ours):"
 echo "  ~/.codex/pets/                                 — your pet collection"
 echo "  ~/.claude/settings.json                         — all other keys preserved"
-echo ""
-echo "If you installed via Homebrew:"
-echo "  brew uninstall danielkempe/clawdex/clawdex"
-echo "  brew untap danielkempe/clawdex"

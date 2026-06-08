@@ -11,6 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var window: PetWindow!
     private var server: SocketServer!
     private var machine: StateMachine!
+    private var speech: SpeechController!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Hide from Dock & Cmd-Tab. LSUIElement set programmatically since we ship
@@ -32,6 +33,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         machine = StateMachine { [weak self] row in
             DispatchQueue.main.async { self?.window.setRow(row) }
         }
+
+        speech = SpeechController(pet: window)
 
         let sockPath = ProcessInfo.processInfo.environment["CLAWDEX_SOCK"]
             ?? (NSHomeDirectory() + "/.clawdex/sock")
@@ -79,7 +82,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             return
         }
+
+        // Speech: surface Claude's prose (from the transcript) or the hook's
+        // action narration. Independent of the row state machine.
+        if let data = line.data(using: .utf8),
+           let s = try? JSONDecoder().decode(SpeechLine.self, from: data) {
+            speech.handle(event: s.event ?? "", narration: s.text, transcriptPath: s.transcript)
+        }
+
         machine.ingest(line)
+    }
+
+    /// Lenient view of a socket line for the speech path (all fields optional).
+    private struct SpeechLine: Decodable {
+        let event: String?
+        let text: String?
+        let transcript: String?
     }
 }
 

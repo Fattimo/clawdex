@@ -34,6 +34,28 @@ json_get_raw() {
 
 EVENT="$(json_get hook_event_name)"
 TOOL="$(json_get tool_name)"
+TRANSCRIPT="$(json_get transcript_path)"
+
+# JSON-escape a string for embedding in our one-line message. No jq — pure
+# sed/tr. Backslash first, then quote, then strip control chars.
+json_escape() {
+  printf '%s' "$1" \
+    | sed 's/\\/\\\\/g; s/"/\\"/g' \
+    | tr -d '\n\r\t'
+}
+
+# Same, but caps length first so a giant command can't blow up the bubble.
+# Only for display narration — never for paths.
+json_escape_short() {
+  # Strip trailing backslashes (artifact of the quote-stopping extractor on
+  # commands that contain a "), then cap length and escape.
+  printf '%s' "$1" | sed 's/[[:space:]]*\\*$//' | cut -c1-80 | json_escape_stdin
+}
+json_escape_stdin() {
+  sed 's/\\/\\\\/g; s/"/\\"/g' | tr -d '\n\r\t'
+}
+
+basename_of() { printf '%s' "${1##*/}"; }
 
 # State translation — see docs/state-mapping.md for rationale.
 ROW=0
@@ -69,9 +91,45 @@ case "$EVENT" in
     exit 0 ;;
 esac
 
+# Action narration — a glanceable one-liner the daemon shows in the speech
+# bubble when there's no fresher prose in the transcript (e.g. mid-tool-call).
+# The daemon prefers Claude's real words; this fills the gaps.
+NARRATION=""
+case "$EVENT" in
+  UserPromptSubmit)
+    NARRATION="💭 thinking…" ;;
+  PreToolUse)
+    case "$TOOL" in
+      Bash)
+        NARRATION="⚡ $(json_get command)" ;;
+      Edit|Write|MultiEdit|NotebookEdit)
+        NARRATION="✏️ $(basename_of "$(json_get file_path)")" ;;
+      Read)
+        NARRATION="🔍 $(basename_of "$(json_get file_path)")" ;;
+      Grep)
+        NARRATION="🔍 $(json_get pattern)" ;;
+      Glob)
+        NARRATION="🔍 $(json_get pattern)" ;;
+      WebFetch|WebSearch)
+        NARRATION="🌐 $(json_get query)" ;;
+      Task)
+        NARRATION="🤖 subagent…" ;;
+      *)
+        NARRATION="⚡ $TOOL" ;;
+    esac ;;
+  Notification)
+    NARRATION="⏳ needs you" ;;
+  PreCompact)
+    NARRATION="🗜️ compacting…" ;;
+  # SessionStart / Stop / SubagentStop: leave empty so the daemon shows the
+  # latest real prose (the greeting / final answer) instead of a canned line.
+esac
+
 # Compose the daemon message. JSON line, easy to debug with `nc -lU`.
 TS="$(date +%s)"
-MSG="{\"event\":\"$EVENT\",\"tool\":\"$TOOL\",\"row\":$ROW,\"mode\":\"$MODE\",\"ttl\":$TTL,\"ts\":$TS}"
+TEXT="$(json_escape_short "$NARRATION")"
+TRANSCRIPT_ESC="$(json_escape "$TRANSCRIPT")"
+MSG="{\"event\":\"$EVENT\",\"tool\":\"$TOOL\",\"row\":$ROW,\"mode\":\"$MODE\",\"ttl\":$TTL,\"text\":\"$TEXT\",\"transcript\":\"$TRANSCRIPT_ESC\",\"ts\":$TS}"
 
 # Best-effort send. If the daemon isn't running, exit silently. Use a short
 # timeout via the OS rather than nc flags (varies between BSD nc and ncat).

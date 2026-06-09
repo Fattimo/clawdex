@@ -103,6 +103,8 @@ case "$EVENT" in
   Stop|SubagentStop)
     # Use stop_hook_active to detect agent finishing without error.
     ROW=3; MODE=transient ;;                    # waving — done (success path)
+  SessionEnd)
+    ROW=0; MODE=release ;;                       # session closed — drop its pill
   PreCompact)
     ROW=8; MODE=sticky; TTL=1500 ;;             # review — compacting context
   *)

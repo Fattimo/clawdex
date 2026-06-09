@@ -90,6 +90,7 @@ if command -v jq >/dev/null 2>&1; then
     .hooks.Stop             = [{ "hooks": [{ "type": "command", "command": $hook }] }] |
     .hooks.SubagentStop     = [{ "hooks": [{ "type": "command", "command": $hook }] }] |
     .hooks.PreCompact       = [{ "hooks": [{ "type": "command", "command": $hook }] }] |
+    .hooks.SessionEnd       = [{ "hooks": [{ "type": "command", "command": $hook }] }] |
     .statusLine             = { "type": "command", "command": $statusline }
   ' "$SETTINGS" > "$TMP" && mv "$TMP" "$SETTINGS"
   echo "    settings.json updated."

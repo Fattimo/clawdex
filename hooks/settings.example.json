@@ -9,7 +9,8 @@
     "Notification":     [{ "hooks": [{ "type": "command", "command": "HOOKS_DIR/clawdex-hook" }] }],
     "Stop":             [{ "hooks": [{ "type": "command", "command": "HOOKS_DIR/clawdex-hook" }] }],
     "SubagentStop":     [{ "hooks": [{ "type": "command", "command": "HOOKS_DIR/clawdex-hook" }] }],
-    "PreCompact":       [{ "hooks": [{ "type": "command", "command": "HOOKS_DIR/clawdex-hook" }] }]
+    "PreCompact":       [{ "hooks": [{ "type": "command", "command": "HOOKS_DIR/clawdex-hook" }] }],
+    "SessionEnd":       [{ "hooks": [{ "type": "command", "command": "HOOKS_DIR/clawdex-hook" }] }]
   },
 
   "statusLine": {

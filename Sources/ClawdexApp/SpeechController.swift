@@ -89,16 +89,23 @@ final class SpeechController {
                 source: String?, root: String?) {
         let src = (source ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
 
-        // Switchboard pill. Stop (turn finished, ready to reprompt) and
-        // Notification (asking for permission) light the pill; any working event
-        // dims it. Done before the prose guard below so readiness tracks even
-        // when there's nothing new to say.
+        // Session closed: drop its pill and stop — there's nothing to narrate.
+        if event == "SessionEnd" {
+            if !src.isEmpty { removePill(source: src) }
+            return
+        }
+
+        // Switchboard pill. A fresh session (SessionStart) starts lit — it's
+        // waiting on your first prompt. Stop (turn finished) and Notification
+        // (asking for permission) also light it; any working event dims it.
+        // Done before the prose guard below so readiness tracks even when
+        // there's nothing new to say.
         if !src.isEmpty {
             let lit: Bool?
             switch event {
-            case "Stop", "Notification":
+            case "SessionStart", "Stop", "Notification":
                 lit = true
-            case "UserPromptSubmit", "SessionStart", "PreToolUse", "PostToolUse", "PreCompact":
+            case "UserPromptSubmit", "PreToolUse", "PostToolUse", "PreCompact":
                 lit = false
             default:
                 lit = nil   // SubagentStop and others: leave the pill as-is
@@ -264,17 +271,25 @@ final class SpeechController {
     }
 
     /// Drop pills for sessions that have gone quiet — but never one that's still
-    /// lit (it needs you, however long that takes).
+    /// lit (it needs you, however long that takes). Runs on the main run loop.
     private func prunePills() {
         let now = Date()
-        for source in pillOrder {
-            guard let pill = pills[source] else { continue }
-            if !pill.lit && now.timeIntervalSince(pill.lastSeen) > pillIdleTimeout {
-                pills.removeValue(forKey: source)
-                pillOrder.removeAll { $0 == source }
-                pill.window.fadeOut()
-            }
+        let stale = pillOrder.filter { source in
+            guard let pill = pills[source] else { return false }
+            return !pill.lit && now.timeIntervalSince(pill.lastSeen) > pillIdleTimeout
         }
+        for source in stale { removePillOnMain(source: source) }
+    }
+
+    /// Remove a session's pill (from any thread).
+    private func removePill(source: String) {
+        DispatchQueue.main.async { [weak self] in self?.removePillOnMain(source: source) }
+    }
+
+    private func removePillOnMain(source: String) {
+        guard let pill = pills.removeValue(forKey: source) else { return }
+        pillOrder.removeAll { $0 == source }
+        pill.window.fadeOut()
         relayoutPills()
     }
 

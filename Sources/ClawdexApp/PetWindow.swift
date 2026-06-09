@@ -20,6 +20,10 @@ final class PetWindow: NSPanel {
 
     private var isDragging = false
 
+    /// Fired while/after the pet is dragged so attached overlays (the badge)
+    /// can re-evaluate which side of the pet they belong on.
+    var onMoved: (() -> Void)?
+
     /// On-screen scale. 0.5 → pixel-perfect on Retina (1 source px = 1 native px).
     /// 1.0 → 2× pixel-doubled (still crisp via nearest-neighbor + contentsScale).
     private let scale: CGFloat
@@ -110,11 +114,13 @@ final class PetWindow: NSPanel {
         if abs(stepDx) < 1.0 { return }
         let row: AnimationRow = stepDx >= 0 ? .runningRight : .runningLeft
         applyDisplayedRow(row)
+        onMoved?()
     }
 
     func dragEnded() {
         isDragging = false
         applyDisplayedRow(commandedRow)
+        onMoved?()
     }
 
     private func applyDisplayedRow(_ row: AnimationRow) {

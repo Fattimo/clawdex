@@ -29,6 +29,27 @@ final class SpeechController {
     private var bubbles: [String: Bubble] = [:]
     private var lastProse: [String: String] = [:]
 
+    /// Agent-readiness switchboard: one pill per active session, stacked
+    /// vertically beside the pet. A pill is "lit" while its session waits on you
+    /// (finished a turn, or asking for input) and "dim" while it's working.
+    /// Pills auto-prune once a session goes quiet (dim + idle past the timeout);
+    /// a lit pill never disappears on its own.
+    private final class Pill {
+        let window = PillWindow()
+        var size: NSSize = .zero
+        var lit = false
+        var root = ""
+        var lastSeen = Date()
+    }
+    private var pillOrder: [String] = []        // oldest → newest, bottom → top
+    private var pills: [String: Pill] = [:]
+    private let pillIdleTimeout: TimeInterval = 600   // 10 min quiet → prune
+    private let pillGap: CGFloat = 2            // near-flush to the visible body
+    /// Transparent padding inside the pet's window frame (the sprite doesn't
+    /// fill the cell). Anchoring to the frame leaves a dead gap, so we pull in
+    /// by this much to hug the actual artwork. ~8pt at the default 0.75 scale.
+    private let petArtInset: CGFloat = 8
+
     private let maxBubbles = 5
     private let gap: CGFloat = 6
 
@@ -53,6 +74,13 @@ final class SpeechController {
 
     init(pet: PetWindow) {
         self.pet = pet
+        // Keep the switchboard glued to the pet (and on the correct side) as it
+        // is dragged around the screen.
+        pet.onMoved = { [weak self] in self?.relayoutPills() }
+        // Sweep out sessions that have gone quiet.
+        Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+            self?.prunePills()
+        }
     }
 
     /// Feed one socket event. `narration`, `transcriptPath`, and `source` are
@@ -60,6 +88,23 @@ final class SpeechController {
     func handle(event: String, narration: String?, transcriptPath: String?,
                 source: String?, root: String?) {
         let src = (source ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Switchboard pill. Stop (turn finished, ready to reprompt) and
+        // Notification (asking for permission) light the pill; any working event
+        // dims it. Done before the prose guard below so readiness tracks even
+        // when there's nothing new to say.
+        if !src.isEmpty {
+            let lit: Bool?
+            switch event {
+            case "Stop", "Notification":
+                lit = true
+            case "UserPromptSubmit", "SessionStart", "PreToolUse", "PostToolUse", "PreCompact":
+                lit = false
+            default:
+                lit = nil   // SubagentStop and others: leave the pill as-is
+            }
+            updatePill(source: src, root: root ?? "", lit: lit)
+        }
 
         // A user prompt (or session start) begins a NEW turn: there's no new
         // assistant prose yet, and the transcript's latest assistant text is the
@@ -136,15 +181,18 @@ final class SpeechController {
         }
     }
 
-    /// Open the project root the bubble came from in Zed.
+    /// Focus the session's project in Zed. Root comes from the pill (which
+    /// outlives the bubble) and falls back to the bubble.
     private func openProject(source: String) {
-        guard let root = bubbles[source]?.root, !root.isEmpty else { return }
+        let root = pills[source]?.root ?? bubbles[source]?.root ?? ""
+        guard !root.isEmpty else { return }
         let folder = URL(fileURLWithPath: root)
 
         let ws = NSWorkspace.shared
         let zedURL = ws.urlForApplication(withBundleIdentifier: "dev.zed.Zed")
             ?? URL(fileURLWithPath: "/Applications/Zed.app")
         let cfg = NSWorkspace.OpenConfiguration()
+        cfg.activates = true   // bring Zed (and that workspace) to the front
         ws.open([folder], withApplicationAt: zedURL, configuration: cfg) { _, err in
             if let err = err {
                 NSLog("clawdex: failed to open \(root) in Zed: \(err.localizedDescription)")
@@ -179,6 +227,82 @@ final class SpeechController {
             guard let b = bubbles[source] else { continue }
             b.window.setFrameOrigin(NSPoint(x: x, y: y))
             y += b.size.height + gap
+        }
+    }
+
+    // MARK: - Switchboard
+
+    /// Create-or-update a session's pill and (optionally) flip its lit state.
+    private func updatePill(source: String, root: String, lit: Bool?) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self, let pet = self.pet else { return }
+            let pill: Pill
+            if let existing = self.pills[source] {
+                pill = existing
+            } else {
+                pill = Pill()
+                pill.window.onClick = { [weak self] in self?.tapPill(source: source) }
+                pet.addChildWindow(pill.window, ordered: .above)
+                self.pills[source] = pill
+                self.pillOrder.append(source)
+            }
+            if !root.isEmpty { pill.root = root }
+            pill.lastSeen = Date()
+            if let lit = lit { pill.lit = lit }
+            pill.size = pill.window.setContent(label: source, lit: pill.lit,
+                                               accent: self.color(for: source))
+            self.relayoutPills()
+            pill.window.fadeIn()
+        }
+    }
+
+    /// Clicking a pill focuses its Zed window. The pill stays lit — it only
+    /// dims once the session actually starts working again; refocusing isn't
+    /// an acknowledgement.
+    private func tapPill(source: String) {
+        openProject(source: source)
+    }
+
+    /// Drop pills for sessions that have gone quiet — but never one that's still
+    /// lit (it needs you, however long that takes).
+    private func prunePills() {
+        let now = Date()
+        for source in pillOrder {
+            guard let pill = pills[source] else { continue }
+            if !pill.lit && now.timeIntervalSince(pill.lastSeen) > pillIdleTimeout {
+                pills.removeValue(forKey: source)
+                pillOrder.removeAll { $0 == source }
+                pill.window.fadeOut()
+            }
+        }
+        relayoutPills()
+    }
+
+    /// Stack the pills vertically beside the pet, bottom-aligned with the pet's
+    /// feet and growing upward (oldest at the bottom). Hugs the pet's right
+    /// side, flipping to the left (right-aligned to the pet) when the pet is
+    /// parked against the screen's right edge.
+    private func relayoutPills() {
+        guard let pet = pet else { return }
+        let pf = pet.frame
+        let widest = pillOrder.compactMap { pills[$0]?.size.width }.max() ?? 0
+
+        // Anchor to the visible sprite edges, not the padded window frame.
+        let rightEdge = pf.maxX - petArtInset
+        let leftEdge = pf.minX + petArtInset
+
+        var onLeft = false
+        if let v = (pet.screen ?? NSScreen.main)?.visibleFrame,
+           rightEdge + pillGap + widest > v.maxX - 4 {
+            onLeft = true
+        }
+
+        var y = pf.minY
+        for source in pillOrder {
+            guard let pill = pills[source] else { continue }
+            let x = onLeft ? leftEdge - pillGap - pill.size.width : rightEdge + pillGap
+            pill.window.setFrameOrigin(NSPoint(x: x, y: y))
+            y += PillWindow.height + pillGap
         }
     }
 

@@ -14,12 +14,11 @@ SETTINGS="$HOME/.claude/settings.json"
 LAUNCH_AGENT="$HOME/Library/LaunchAgents/dev.clawdex.daemon.plist"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# Build from source if no binaries are present and we're inside a checkout.
-# If clawdexd is already on PATH (e.g. a prior install), we reuse it.
-if [ ! -x "$SCRIPT_DIR/.build/release/clawdexd" ] \
-   && [ ! -x "$SCRIPT_DIR/.build/debug/clawdexd" ] \
-   && ! command -v clawdexd >/dev/null 2>&1 \
-   && [ -f "$SCRIPT_DIR/Package.swift" ]; then
+# Always (re)build from source when run inside a checkout, so re-running the
+# installer after a code change actually picks it up. Set CLAWDEX_NO_BUILD=1 to
+# skip and reuse whatever binary is already in .build/ or on PATH. Outside a
+# checkout (no Package.swift — e.g. a prebuilt drop), there's nothing to build.
+if [ -z "$CLAWDEX_NO_BUILD" ] && [ -f "$SCRIPT_DIR/Package.swift" ]; then
   echo "==> Building clawdex (swift build -c release; ~30-60s first time)"
   (cd "$SCRIPT_DIR" && swift build -c release)
 fi

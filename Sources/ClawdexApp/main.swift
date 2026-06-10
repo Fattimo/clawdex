@@ -20,12 +20,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         window = PetWindow()
 
-        // Pick first available pet. If user prefers a specific one, ClawdexCLI
-        // can send a "select" event over the socket later.
-        let pets = PetLibrary.discover()
-        if let first = pets.first {
-            window.loadPet(first)
-            NSLog("clawdex: loaded pet '\(first.0.displayName)' from \(first.1.deletingLastPathComponent().path)")
+        // Load the user's saved pet (from a prior `select`) if it still
+        // resolves, else the alphabetically-first discovered pet. ClawdexCLI
+        // can send a "select" event over the socket to switch at runtime.
+        if let pet = PetLibrary.preferred() {
+            window.loadPet(pet)
+            NSLog("clawdex: loaded pet '\(pet.0.displayName)' from \(pet.1.deletingLastPathComponent().path)")
         } else {
             NSLog("clawdex: no pets found in ~/.codex/pets or ~/.clawdex/pets — install one with `npx petdex install <name>` or use the hatch-pet skill.")
         }
@@ -75,6 +75,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         let pets = PetLibrary.discover()
                         if let match = pets.first(where: { $0.0.id == id }) {
                             self?.window.loadPet(match)
+                            PetLibrary.savePreference(id: id)
                         }
                     }
                 default: break

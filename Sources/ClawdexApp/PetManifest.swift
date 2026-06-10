@@ -30,6 +30,41 @@ struct PetLibrary {
         ]
     }
 
+    /// Where the daemon records the user's last `select` so it survives
+    /// restarts and reinstalls (as long as ~/.clawdex isn't wiped). Lives
+    /// outside ~/.codex/pets so reinstalling pets doesn't clobber it.
+    static func preferenceURL() -> URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".clawdex/selected")
+    }
+
+    /// Persisted pet id from a prior `select`, or nil if none/unreadable.
+    static func loadPreference() -> String? {
+        guard let raw = try? String(contentsOf: preferenceURL(), encoding: .utf8) else { return nil }
+        let id = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return id.isEmpty ? nil : id
+    }
+
+    /// Records the preferred pet id, creating ~/.clawdex if needed. Best-effort:
+    /// a write failure shouldn't break the live `select`.
+    static func savePreference(id: String) {
+        let url = preferenceURL()
+        let fm = FileManager.default
+        try? fm.createDirectory(at: url.deletingLastPathComponent(),
+                                withIntermediateDirectories: true)
+        try? id.write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    /// The pet to load on startup: the saved preference if it still resolves to
+    /// an installed pet, otherwise the alphabetically-first discovered pet.
+    static func preferred() -> (PetManifest, URL)? {
+        let pets = discover()
+        if let id = loadPreference(), let match = pets.first(where: { $0.0.id == id }) {
+            return match
+        }
+        return pets.first
+    }
+
     static func discover() -> [(PetManifest, URL)] {
         var results: [(PetManifest, URL)] = []
         var seen = Set<String>()

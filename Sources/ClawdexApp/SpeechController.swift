@@ -63,6 +63,16 @@ final class SpeechController {
     private var colorIndex = 0
     private var colorBySource: [String: NSColor] = [:]
 
+    /// Separator joining a session key's "repo" and "agent" halves. A control
+    /// char so it can't collide with a real repo name.
+    private static let keySep = "\u{1}"
+
+    /// The agent half of a composite "repo<sep>agent" session key.
+    private static func agent(ofKey key: String) -> String {
+        let parts = key.components(separatedBy: keySep)
+        return parts.count == 2 ? parts[1] : "claude"
+    }
+
     private func color(for source: String) -> NSColor {
         guard !source.isEmpty else { return .clear }
         if let c = colorBySource[source] { return c }
@@ -94,7 +104,7 @@ final class SpeechController {
         // under Claude and Codex at once gets its own pill, bubble, and accent
         // color instead of clobbering one shared entry. `label` is what the user
         // sees — it marks non-Claude agents (e.g. "pylon ·cdx").
-        let src = repo.isEmpty ? "" : "\(repo)\u{1}\(agentTag)"
+        let src = repo.isEmpty ? "" : repo + Self.keySep + agentTag
         let label = Self.displayLabel(repo: repo, agent: agentTag)
 
         // Session closed: drop its pill and stop — there's nothing to narrate.
@@ -198,21 +208,27 @@ final class SpeechController {
         }
     }
 
-    /// Focus the session's project in Zed. Root comes from the pill (which
-    /// outlives the bubble) and falls back to the bubble.
+    /// Focus the session's project in its agent's app — Codex Desktop for Codex
+    /// sessions, Zed for everyone else (both accept a folder to open). Root comes
+    /// from the pill (which outlives the bubble) and falls back to the bubble.
     private func openProject(source: String) {
         let root = pills[source]?.root ?? bubbles[source]?.root ?? ""
         guard !root.isEmpty else { return }
         let folder = URL(fileURLWithPath: root)
 
+        let (bundleID, fallbackPath, name): (String, String, String) =
+            Self.agent(ofKey: source) == "codex"
+                ? ("com.openai.codex", "/Applications/Codex.app", "Codex")
+                : ("dev.zed.Zed", "/Applications/Zed.app", "Zed")
+
         let ws = NSWorkspace.shared
-        let zedURL = ws.urlForApplication(withBundleIdentifier: "dev.zed.Zed")
-            ?? URL(fileURLWithPath: "/Applications/Zed.app")
+        let appURL = ws.urlForApplication(withBundleIdentifier: bundleID)
+            ?? URL(fileURLWithPath: fallbackPath)
         let cfg = NSWorkspace.OpenConfiguration()
-        cfg.activates = true   // bring Zed (and that workspace) to the front
-        ws.open([folder], withApplicationAt: zedURL, configuration: cfg) { _, err in
+        cfg.activates = true   // bring the app (and that workspace) to the front
+        ws.open([folder], withApplicationAt: appURL, configuration: cfg) { _, err in
             if let err = err {
-                NSLog("clawdex: failed to open \(root) in Zed: \(err.localizedDescription)")
+                NSLog("clawdex: failed to open \(root) in \(name): \(err.localizedDescription)")
             }
         }
     }

@@ -6,7 +6,8 @@ import AppKit
 /// color (the same color its speech bubble uses, so the two read as one
 /// system). "Lit" means the session is waiting on you (finished its turn, or
 /// asking for input) — drawn bright with an accent tint and ring. "Dim" means
-/// it's working — the pill recedes. Clicking focuses that project's Zed window.
+/// it's working — the pill recedes. Clicking focuses that project's Zed window;
+/// hovering reveals a tiny ✕ for dismissing a stale pill.
 ///
 /// Added as a child window of the pet so it follows drags; the switchboard
 /// stacks these vertically beside the pet.
@@ -18,6 +19,8 @@ final class PillWindow: NSPanel {
 
     /// Invoked when the pill is clicked (focus the project's Zed window).
     var onClick: (() -> Void)?
+    /// Invoked when the hover-revealed ✕ is clicked.
+    var onClose: (() -> Void)?
 
     /// Alpha the pill settles at — full when lit, faded back when dim so an
     /// inactive session clearly recedes.
@@ -38,6 +41,7 @@ final class PillWindow: NSPanel {
         alphaValue = 0
 
         view.onClick = { [weak self] in self?.onClick?() }
+        view.onClose = { [weak self] in self?.onClose?() }
         contentView = view
     }
 
@@ -97,15 +101,62 @@ final class PillView: NSView {
     static let padR: CGFloat = 11
     static let dotSize: CGFloat = 8
     static let dotGap: CGFloat = 7
+    static let closeSize: CGFloat = 10
     static let font = NSFont.systemFont(ofSize: 12, weight: .medium)
 
     var title = "" { didSet { needsDisplay = true } }
     var lit = false { didSet { needsDisplay = true } }
     var accent: NSColor = .systemBlue { didSet { needsDisplay = true } }
     var onClick: (() -> Void)?
+    var onClose: (() -> Void)?
+
+    private var isHovering = false {
+        didSet {
+            guard oldValue != isHovering else { return }
+            needsDisplay = true
+        }
+    }
+    private var trackingArea: NSTrackingArea?
+
+    private func closeRect() -> NSRect {
+        NSRect(x: bounds.maxX - Self.padR,
+               y: bounds.midY - Self.closeSize / 2,
+               width: Self.closeSize,
+               height: Self.closeSize)
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let trackingArea {
+            removeTrackingArea(trackingArea)
+        }
+        let trackingArea = NSTrackingArea(
+            rect: .zero,
+            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(trackingArea)
+        self.trackingArea = trackingArea
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        isHovering = true
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        isHovering = false
+    }
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
-    override func mouseDown(with event: NSEvent) { onClick?() }
+    override func mouseDown(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        if isHovering && closeRect().insetBy(dx: -2, dy: -2).contains(point) {
+            onClose?()
+        } else {
+            onClick?()
+        }
+    }
 
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
@@ -159,5 +210,19 @@ final class PillView: NSView {
         let avail = bounds.width - tx - Self.padR
         let drawRect = NSRect(x: tx, y: cy - tsize.height / 2, width: max(0, avail), height: tsize.height)
         (title as NSString).draw(in: drawRect, withAttributes: attrs)
+
+        if isHovering {
+            let close = closeRect()
+            let inset = close.insetBy(dx: 2.8, dy: 2.8)
+            let x = NSBezierPath()
+            x.lineWidth = 1.2
+            x.lineCapStyle = .round
+            x.move(to: NSPoint(x: inset.minX, y: inset.minY))
+            x.line(to: NSPoint(x: inset.maxX, y: inset.maxY))
+            x.move(to: NSPoint(x: inset.minX, y: inset.maxY))
+            x.line(to: NSPoint(x: inset.maxX, y: inset.minY))
+            (lit ? accent.withAlphaComponent(0.9) : NSColor.tertiaryLabelColor).setStroke()
+            x.stroke()
+        }
     }
 }

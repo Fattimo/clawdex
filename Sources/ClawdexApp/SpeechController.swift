@@ -296,6 +296,7 @@ final class SpeechController {
             } else {
                 pill = Pill()
                 pill.window.onClick = { [weak self] in self?.tapPill(source: source) }
+                pill.window.onClose = { [weak self] in self?.removePillOnMain(source: source) }
                 pet.addChildWindow(pill.window, ordered: .above)
                 self.pills[source] = pill
                 self.pillOrder.append(source)

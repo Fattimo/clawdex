@@ -99,6 +99,35 @@ else
   echo "    replacing HOOKS_DIR with $HOOKS_DIR."
 fi
 
+# --- Codex ingestion -------------------------------------------------------
+# Codex shares Claude Code's hook contract (same event names + stdin payload),
+# so the same clawdex-hook drives the pet from Codex sessions too — passed a
+# `codex` arg so the daemon labels/colors them distinctly ('repo ·cdx').
+#
+# Unlike Claude (~/.claude/settings.json), Codex has no settings file we merge
+# into: hooks come from a hooks.json (and config.toml only stores their *trust
+# hash*). We write a clawdex-managed ~/.codex/hooks.json. Codex will prompt once
+# to TRUST it on next launch — that step is interactive by design and can't be
+# safely pre-seeded from here.
+CODEX_HOME_DIR="${CODEX_HOME:-$HOME/.codex}"
+if [ -d "$CODEX_HOME_DIR" ]; then
+  CODEX_HOOKS="$CODEX_HOME_DIR/hooks.json"
+  echo "==> Wiring Codex hooks into $CODEX_HOOKS"
+  if [ -e "$CODEX_HOOKS" ] && ! grep -q "clawdex-hook" "$CODEX_HOOKS" 2>/dev/null; then
+    # An unrelated hooks.json already exists — don't stomp it.
+    echo "    $CODEX_HOOKS exists and isn't clawdex-managed; leaving it alone."
+    echo "    Merge hooks/codex-hooks.example.json into it manually (HOOKS_DIR=$HOOKS_DIR)."
+  else
+    sed "s#HOOKS_DIR#$HOOKS_DIR#g" "$(dirname "$0")/hooks/codex-hooks.example.json" > "$CODEX_HOOKS"
+    echo "    hooks.json written (clawdex-managed)."
+    echo "    NOTE: launch Codex and APPROVE the one-time 'trust hooks' prompt so they fire."
+    echo "    If your Codex build ignores a global hooks.json, copy the same block into"
+    echo "    a project's .codex/hooks.json instead."
+  fi
+else
+  echo "==> No ~/.codex found — skipping Codex wiring (install Codex, then re-run)."
+fi
+
 echo "==> Installing launchd agent at $LAUNCH_AGENT"
 mkdir -p "$(dirname "$LAUNCH_AGENT")"
 cat > "$LAUNCH_AGENT" <<PLIST

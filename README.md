@@ -26,6 +26,12 @@ If you already have Codex pets in `~/.codex/pets/`, they all work. Drop in, done
 
 State changes are driven by Claude Code [hooks](https://docs.anthropic.com/claude-code/hooks) and the statusline API.
 
+### Codex too
+
+Codex shares Claude Code's hook contract (same event names, same stdin payload), so the same pet reacts to your Codex sessions. `install.sh` writes a clawdex-managed `~/.codex/hooks.json`; Codex sessions are tagged with the `codex` agent so they get their own switchboard pill, bubble, and accent color (`repo ·cdx`) — a Claude and a Codex session in the same repo stay distinct.
+
+One manual step: Codex gates hooks behind a one-time **trust prompt** — approve it on next launch (it can't be safely pre-seeded). Verify it's flowing with `tail -f ~/.clawdex/hook-trail.log` — you should see `"agent":"codex"` lines as Codex works.
+
 ## Install
 
 One command, source-from-clone:

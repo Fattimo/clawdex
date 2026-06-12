@@ -86,8 +86,16 @@ final class SpeechController {
     /// Feed one socket event. `narration`, `transcriptPath`, and `source` are
     /// all optional.
     func handle(event: String, narration: String?, transcriptPath: String?,
-                source: String?, root: String?) {
-        let src = (source ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                source: String?, root: String?, agent: String?) {
+        let repo = (source ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let agentTag = (agent ?? "claude")
+            .trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        // Composite identity keyed on repo + agent: the same project running
+        // under Claude and Codex at once gets its own pill, bubble, and accent
+        // color instead of clobbering one shared entry. `label` is what the user
+        // sees — it marks non-Claude agents (e.g. "pylon ·cdx").
+        let src = repo.isEmpty ? "" : "\(repo)\u{1}\(agentTag)"
+        let label = Self.displayLabel(repo: repo, agent: agentTag)
 
         // Session closed: drop its pill and stop — there's nothing to narrate.
         if event == "SessionEnd" {
@@ -103,14 +111,16 @@ final class SpeechController {
         if !src.isEmpty {
             let lit: Bool?
             switch event {
-            case "SessionStart", "Stop", "Notification":
+            case "SessionStart", "Stop", "Notification", "PermissionRequest":
+                // Codex fires PermissionRequest where Claude fires Notification.
                 lit = true
-            case "UserPromptSubmit", "PreToolUse", "PostToolUse", "PreCompact":
+            case "UserPromptSubmit", "PreToolUse", "PostToolUse",
+                 "PreCompact", "PostCompact":
                 lit = false
             default:
                 lit = nil   // SubagentStop and others: leave the pill as-is
             }
-            updatePill(source: src, root: root ?? "", lit: lit)
+            updatePill(source: src, label: label, root: root ?? "", lit: lit)
         }
 
         // A user prompt (or session start) begins a NEW turn: there's no new
@@ -139,10 +149,10 @@ final class SpeechController {
         guard let text = toShow else { return }
         // The final turn response arrives on Stop (agent done, ready to reprompt);
         // everything else is filler and gets a muted treatment.
-        show(source: src, root: root ?? "", text: text, isFinal: event == "Stop")
+        show(source: src, label: label, root: root ?? "", text: text, isFinal: event == "Stop")
     }
 
-    private func show(source: String, root: String, text raw: String, isFinal: Bool) {
+    private func show(source: String, label: String, root: String, text raw: String, isFinal: Bool) {
         let text = Self.clean(raw)
         guard !text.isEmpty else { return }
         DispatchQueue.main.async { [weak self] in
@@ -163,7 +173,7 @@ final class SpeechController {
             }
             if !root.isEmpty { bubble.root = root }
 
-            bubble.size = bubble.window.setContent(source: source, message: text,
+            bubble.size = bubble.window.setContent(source: label, message: text,
                                                    isFinal: isFinal, accent: self.color(for: source))
             self.relayout()
             bubble.window.fadeIn()
@@ -240,7 +250,7 @@ final class SpeechController {
     // MARK: - Switchboard
 
     /// Create-or-update a session's pill and (optionally) flip its lit state.
-    private func updatePill(source: String, root: String, lit: Bool?) {
+    private func updatePill(source: String, label: String, root: String, lit: Bool?) {
         DispatchQueue.main.async { [weak self] in
             guard let self = self, let pet = self.pet else { return }
             let pill: Pill
@@ -256,7 +266,7 @@ final class SpeechController {
             if !root.isEmpty { pill.root = root }
             pill.lastSeen = Date()
             if let lit = lit { pill.lit = lit }
-            pill.size = pill.window.setContent(label: source, lit: pill.lit,
+            pill.size = pill.window.setContent(label: label, lit: pill.lit,
                                                accent: self.color(for: source))
             self.relayoutPills()
             pill.window.fadeIn()
@@ -321,6 +331,20 @@ final class SpeechController {
         }
     }
 
+    // MARK: - Labeling
+
+    /// The user-facing label for a session. Claude sessions show the bare repo
+    /// name (the common case); other agents get a short suffix so a Claude and a
+    /// Codex session in the same repo are distinguishable at a glance.
+    private static func displayLabel(repo: String, agent: String) -> String {
+        guard !repo.isEmpty else { return "" }
+        switch agent {
+        case "", "claude": return repo
+        case "codex":      return "\(repo) ·cdx"
+        default:           return "\(repo) ·\(agent)"
+        }
+    }
+
     // MARK: - Transcript reading
 
     /// Read the most recent assistant text block from a Claude Code transcript
@@ -339,19 +363,46 @@ final class SpeechController {
         if start > 0 && !lines.isEmpty { lines.removeFirst() }   // drop partial first line
 
         for lineData in lines.reversed() {
-            guard let obj = try? JSONSerialization.jsonObject(with: Data(lineData)) as? [String: Any],
-                  (obj["type"] as? String) == "assistant",
-                  let msg = obj["message"] as? [String: Any],
-                  let content = msg["content"] as? [[String: Any]] else { continue }
-
-            var text = ""
-            for block in content where (block["type"] as? String) == "text" {
-                if let t = block["text"] as? String { text = t }   // last text block in the message
+            guard let obj = try? JSONSerialization.jsonObject(with: Data(lineData)) as? [String: Any]
+            else { continue }
+            if let t = assistantText(from: obj)?
+                .trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty {
+                return t
             }
-            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmed.isEmpty { return trimmed }
         }
         return nil
+    }
+
+    /// Pull the assistant's text out of one transcript line, handling both the
+    /// Claude Code and Codex rollout shapes:
+    ///   Claude: {"type":"assistant","message":{"content":[{"type":"text","text":…}]}}
+    ///   Codex:  {"type":"response_item","payload":{"type":"message",
+    ///            "role":"assistant","content":[{"type":"output_text","text":…}]}}
+    private static func assistantText(from obj: [String: Any]) -> String? {
+        // Claude Code.
+        if (obj["type"] as? String) == "assistant",
+           let msg = obj["message"] as? [String: Any],
+           let content = msg["content"] as? [[String: Any]] {
+            return lastText(in: content, type: "text")
+        }
+        // Codex rollout: assistant prose lives in a response_item message.
+        if (obj["type"] as? String) == "response_item",
+           let payload = obj["payload"] as? [String: Any],
+           (payload["type"] as? String) == "message",
+           (payload["role"] as? String) == "assistant",
+           let content = payload["content"] as? [[String: Any]] {
+            return lastText(in: content, type: "output_text")
+        }
+        return nil
+    }
+
+    /// The last non-empty `text` among content blocks of the given block type.
+    private static func lastText(in content: [[String: Any]], type: String) -> String? {
+        var text = ""
+        for block in content where (block["type"] as? String) == type {
+            if let t = block["text"] as? String { text = t }
+        }
+        return text.isEmpty ? nil : text
     }
 
     // MARK: - Text shaping

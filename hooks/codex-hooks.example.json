@@ -1,0 +1,16 @@
+{
+  "_comment": "clawdex — Codex hook wiring. install.sh writes this to ~/.codex/hooks.json (replacing HOOKS_DIR with the real install path) so the pet reacts to Codex sessions too. Codex shares Claude Code's hook contract; the `codex` arg tags these events so the daemon labels and colors Codex sessions distinctly ('repo ·cdx'). After installing, Codex prompts once to TRUST these hooks — approve it (or run codex with --dangerously-bypass-hook-trust). If your Codex build doesn't read a global ~/.codex/hooks.json, drop the same hooks block into a project's .codex/hooks.json instead.",
+
+  "hooks": {
+    "SessionStart":     [{ "hooks": [{ "type": "command", "command": "HOOKS_DIR/clawdex-hook codex" }] }],
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "HOOKS_DIR/clawdex-hook codex" }] }],
+    "PreToolUse":       [{ "hooks": [{ "type": "command", "command": "HOOKS_DIR/clawdex-hook codex" }] }],
+    "PostToolUse":      [{ "hooks": [{ "type": "command", "command": "HOOKS_DIR/clawdex-hook codex" }] }],
+    "PermissionRequest":[{ "hooks": [{ "type": "command", "command": "HOOKS_DIR/clawdex-hook codex" }] }],
+    "Stop":             [{ "hooks": [{ "type": "command", "command": "HOOKS_DIR/clawdex-hook codex" }] }],
+    "SubagentStop":     [{ "hooks": [{ "type": "command", "command": "HOOKS_DIR/clawdex-hook codex" }] }],
+    "PreCompact":       [{ "hooks": [{ "type": "command", "command": "HOOKS_DIR/clawdex-hook codex" }] }],
+    "PostCompact":      [{ "hooks": [{ "type": "command", "command": "HOOKS_DIR/clawdex-hook codex" }] }],
+    "SessionEnd":       [{ "hooks": [{ "type": "command", "command": "HOOKS_DIR/clawdex-hook codex" }] }]
+  }
+}

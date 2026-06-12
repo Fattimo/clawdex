@@ -1,16 +1,27 @@
 #!/bin/sh
-# clawdex-hook — translate Claude Code hook events to clawdex animation rows.
+# clawdex-hook — translate Claude Code / Codex hook events to clawdex animation
+# rows.
 #
-# Wired into ~/.claude/settings.json under "hooks". Reads the hook payload
-# (JSON) on stdin, picks an animation row, and sends a one-line event to the
-# clawdex daemon's Unix socket. Never blocks: any failure exits 0 silently so
-# Claude Code never waits on the pet.
+# Wired into ~/.claude/settings.json (Claude Code) or a Codex hooks.json /
+# plugin. Reads the hook payload (JSON) on stdin, picks an animation row, and
+# sends a one-line event to the clawdex daemon's Unix socket. Never blocks: any
+# failure exits 0 silently so the agent never waits on the pet.
+#
+# Codex and Claude Code share a hook contract — same PascalCase event names
+# (SessionStart/PreToolUse/PostToolUse/Stop/…), same stdin payload fields
+# (hook_event_name, tool_name, cwd, transcript_path). The one divergence we
+# care about: Codex fires `PermissionRequest` where Claude fires `Notification`.
+#
+# The ingesting agent is stamped onto every message so the daemon can label and
+# color each agent's sessions distinctly. Defaults to "claude"; Codex wires it
+# in as `clawdex-hook codex` (or CLAWDEX_AGENT=codex).
 #
 # Animation rows are defined by openai/skills hatch-pet (animation-rows.md):
 #   0 idle  1 running-right  2 running-left  3 waving  4 jumping
 #   5 failed  6 waiting  7 running  8 review
 
 SOCK="${CLAWDEX_SOCK:-$HOME/.clawdex/sock}"
+AGENT="${CLAWDEX_AGENT:-${1:-claude}}"
 
 # Read all stdin (Claude Code passes the hook payload as JSON).
 PAYLOAD="$(cat)"
@@ -98,14 +109,15 @@ case "$EVENT" in
     # Don't fight other state — let UserPromptSubmit's "review" or Stop's
     # "waving" take over. Send a soft "release sticky" hint.
     ROW=-1; MODE=release ;;
-  Notification)
+  Notification|PermissionRequest)
+    # Claude fires Notification; Codex fires PermissionRequest. Same meaning.
     ROW=6; MODE=sticky ;;                       # waiting — permission prompt
   Stop|SubagentStop)
     # Use stop_hook_active to detect agent finishing without error.
     ROW=3; MODE=transient ;;                    # waving — done (success path)
   SessionEnd)
     ROW=0; MODE=release ;;                       # session closed — drop its pill
-  PreCompact)
+  PreCompact|PostCompact)
     ROW=8; MODE=sticky; TTL=1500 ;;             # review — compacting context
   *)
     exit 0 ;;
@@ -139,9 +151,9 @@ case "$EVENT" in
       *)
         NARRATION="$TOOL" ;;
     esac ;;
-  Notification)
+  Notification|PermissionRequest)
     NARRATION="waiting for you" ;;
-  PreCompact)
+  PreCompact|PostCompact)
     NARRATION="compacting…" ;;
   # SessionStart / Stop / SubagentStop: leave empty so the daemon shows the
   # latest real prose (the greeting / final answer) instead of a canned line.
@@ -153,7 +165,7 @@ TEXT="$(json_escape_short "$NARRATION")"
 TRANSCRIPT_ESC="$(json_escape "$TRANSCRIPT")"
 SOURCE_ESC="$(json_escape_short "$SOURCE")"
 ROOT_ESC="$(json_escape "$ROOT")"
-MSG="{\"event\":\"$EVENT\",\"tool\":\"$TOOL\",\"row\":$ROW,\"mode\":\"$MODE\",\"ttl\":$TTL,\"text\":\"$TEXT\",\"transcript\":\"$TRANSCRIPT_ESC\",\"source\":\"$SOURCE_ESC\",\"root\":\"$ROOT_ESC\",\"ts\":$TS}"
+MSG="{\"event\":\"$EVENT\",\"agent\":\"$AGENT\",\"tool\":\"$TOOL\",\"row\":$ROW,\"mode\":\"$MODE\",\"ttl\":$TTL,\"text\":\"$TEXT\",\"transcript\":\"$TRANSCRIPT_ESC\",\"source\":\"$SOURCE_ESC\",\"root\":\"$ROOT_ESC\",\"ts\":$TS}"
 
 # Best-effort send. If the daemon isn't running, exit silently. Use a short
 # timeout via the OS rather than nc flags (varies between BSD nc and ncat).

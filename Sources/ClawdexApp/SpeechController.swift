@@ -22,6 +22,7 @@ final class SpeechController {
         var size: NSSize = .zero
         var timer: Timer?
         var root: String = ""
+        var threadID: String = ""   // Codex conversation id, for the deep link
     }
 
     /// Ordered oldest → newest. Newest stacks highest.
@@ -39,6 +40,7 @@ final class SpeechController {
         var size: NSSize = .zero
         var lit = false
         var root = ""
+        var threadID = ""   // Codex conversation id, for the deep link
         var lastSeen = Date()
     }
     private var pillOrder: [String] = []        // oldest → newest, bottom → top
@@ -106,6 +108,9 @@ final class SpeechController {
         // sees — it marks non-Claude agents (e.g. "pylon ·cdx").
         let src = repo.isEmpty ? "" : repo + Self.keySep + agentTag
         let label = Self.displayLabel(repo: repo, agent: agentTag)
+        // Codex conversation id, recovered from the rollout transcript filename,
+        // so a pill click can deep-link straight to that thread.
+        let threadID = Self.threadID(fromTranscript: transcriptPath ?? "")
 
         // Session closed: drop its pill and stop — there's nothing to narrate.
         if event == "SessionEnd" {
@@ -130,7 +135,8 @@ final class SpeechController {
             default:
                 lit = nil   // SubagentStop and others: leave the pill as-is
             }
-            updatePill(source: src, label: label, root: root ?? "", lit: lit)
+            updatePill(source: src, label: label, root: root ?? "",
+                       threadID: threadID, lit: lit)
         }
 
         // A user prompt (or session start) begins a NEW turn: there's no new
@@ -159,10 +165,12 @@ final class SpeechController {
         guard let text = toShow else { return }
         // The final turn response arrives on Stop (agent done, ready to reprompt);
         // everything else is filler and gets a muted treatment.
-        show(source: src, label: label, root: root ?? "", text: text, isFinal: event == "Stop")
+        show(source: src, label: label, root: root ?? "", threadID: threadID,
+             text: text, isFinal: event == "Stop")
     }
 
-    private func show(source: String, label: String, root: String, text raw: String, isFinal: Bool) {
+    private func show(source: String, label: String, root: String, threadID: String,
+                      text raw: String, isFinal: Bool) {
         let text = Self.clean(raw)
         guard !text.isEmpty else { return }
         DispatchQueue.main.async { [weak self] in
@@ -182,6 +190,7 @@ final class SpeechController {
                 self.evictOverflow()
             }
             if !root.isEmpty { bubble.root = root }
+            if !threadID.isEmpty { bubble.threadID = threadID }
 
             bubble.size = bubble.window.setContent(source: label, message: text,
                                                    isFinal: isFinal, accent: self.color(for: source))
@@ -208,18 +217,29 @@ final class SpeechController {
         }
     }
 
-    /// Focus the session's project in its agent's app — Codex Desktop for Codex
-    /// sessions, Zed for everyone else (both accept a folder to open). Root comes
-    /// from the pill (which outlives the bubble) and falls back to the bubble.
+    /// Focus the session. Codex sessions deep-link straight to their thread
+    /// (codex://threads/<id>) when we know the id; otherwise — and for Claude —
+    /// open the project folder in the agent's app (Codex Desktop / Zed, both of
+    /// which accept a folder). Pill outlives the bubble, so it's the first
+    /// lookup; the bubble is the fallback.
     private func openProject(source: String) {
+        let isCodex = Self.agent(ofKey: source) == "codex"
+
+        if isCodex {
+            let threadID = pills[source]?.threadID ?? bubbles[source]?.threadID ?? ""
+            if !threadID.isEmpty, let url = URL(string: "codex://threads/\(threadID)") {
+                NSWorkspace.shared.open(url)
+                return
+            }
+        }
+
         let root = pills[source]?.root ?? bubbles[source]?.root ?? ""
         guard !root.isEmpty else { return }
         let folder = URL(fileURLWithPath: root)
 
-        let (bundleID, fallbackPath, name): (String, String, String) =
-            Self.agent(ofKey: source) == "codex"
-                ? ("com.openai.codex", "/Applications/Codex.app", "Codex")
-                : ("dev.zed.Zed", "/Applications/Zed.app", "Zed")
+        let (bundleID, fallbackPath, name): (String, String, String) = isCodex
+            ? ("com.openai.codex", "/Applications/Codex.app", "Codex")
+            : ("dev.zed.Zed", "/Applications/Zed.app", "Zed")
 
         let ws = NSWorkspace.shared
         let appURL = ws.urlForApplication(withBundleIdentifier: bundleID)
@@ -266,7 +286,8 @@ final class SpeechController {
     // MARK: - Switchboard
 
     /// Create-or-update a session's pill and (optionally) flip its lit state.
-    private func updatePill(source: String, label: String, root: String, lit: Bool?) {
+    private func updatePill(source: String, label: String, root: String,
+                            threadID: String, lit: Bool?) {
         DispatchQueue.main.async { [weak self] in
             guard let self = self, let pet = self.pet else { return }
             let pill: Pill
@@ -280,6 +301,7 @@ final class SpeechController {
                 self.pillOrder.append(source)
             }
             if !root.isEmpty { pill.root = root }
+            if !threadID.isEmpty { pill.threadID = threadID }
             pill.lastSeen = Date()
             if let lit = lit { pill.lit = lit }
             pill.size = pill.window.setContent(label: label, lit: pill.lit,
@@ -289,9 +311,9 @@ final class SpeechController {
         }
     }
 
-    /// Clicking a pill focuses its Zed window. The pill stays lit — it only
-    /// dims once the session actually starts working again; refocusing isn't
-    /// an acknowledgement.
+    /// Clicking a pill focuses its session (Codex thread or editor window). The
+    /// pill stays lit — it only dims once the session actually starts working
+    /// again; refocusing isn't an acknowledgement.
     private func tapPill(source: String) {
         openProject(source: source)
     }
@@ -359,6 +381,19 @@ final class SpeechController {
         case "codex":      return "\(repo) ·cdx"
         default:           return "\(repo) ·\(agent)"
         }
+    }
+
+    /// The Codex conversation id, recovered from a rollout transcript path.
+    /// Codex names them `rollout-<timestamp>-<uuid>.jsonl`, and that trailing
+    /// UUID is exactly the id the `codex://threads/<id>` deep link expects.
+    /// Returns "" when the path isn't a recognizable rollout file (e.g. a Claude
+    /// transcript), so callers can fall back to opening the folder.
+    private static func threadID(fromTranscript path: String) -> String {
+        guard !path.isEmpty else { return "" }
+        let stem = ((path as NSString).lastPathComponent as NSString).deletingPathExtension
+        guard stem.hasPrefix("rollout-"), stem.count >= 36 else { return "" }
+        let candidate = String(stem.suffix(36))
+        return UUID(uuidString: candidate) != nil ? candidate : ""
     }
 
     // MARK: - Transcript reading

@@ -7,10 +7,12 @@ import Foundation
 /// - transient: play the row through one full cycle, then return to idle.
 /// - sticky: hold this row until another sticky/transient arrives, or a
 ///   release fires. Heartbeat absence (>15s) also drops to idle.
-/// - release: clear sticky lock without interrupting an in-flight transient.
+/// - release: clear sticky lock without interrupting an in-flight transient;
+///   Codex PostToolUse is intentionally a no-op release.
 final class StateMachine {
     struct Event: Decodable {
         let event: String
+        let agent: String?
         let row: Int
         let mode: String
         let ttl: Int?
@@ -56,6 +58,11 @@ final class StateMachine {
             guard let row = AnimationRow(rawValue: evt.row) else { return }
             let cycleMs = evt.ttl.flatMap { $0 > 0 ? $0 : nil } ?? row.cycleDurationMs
             transientUntil = Date().addingTimeInterval(TimeInterval(cycleMs) / 1000.0)
+            if evt.event == "Stop" && evt.agent == "codex" {
+                // A final wave should settle to idle, not back to the work row
+                // that Codex kept alive across the last PostToolUse boundary.
+                stickyRow = nil
+            }
             setRow(row)
 
         case .sticky:
@@ -71,7 +78,13 @@ final class StateMachine {
             setRow(row)
 
         case .release:
-            stickyRow = nil
+            // Codex emits PostToolUse between internal tool calls. Keep the
+            // current work row alive there so it does not flash back to the
+            // idle/blinking row before the next tool or final Stop arrives.
+            // Claude keeps the older release behavior.
+            if !(evt.event == "PostToolUse" && evt.agent == "codex") {
+                stickyRow = nil
+            }
 
         case .heartbeat:
             lastHeartbeat = Date()

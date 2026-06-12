@@ -28,7 +28,7 @@ The fixed row layout (from
 | `PreToolUse` (Bash/Edit/Write/MultiEdit/NotebookEdit) | 7 | sticky | active work — generic run loop |
 | `PreToolUse` (Read/Grep/Glob/WebFetch/WebSearch)      | 8 | sticky | searching/reading is "review", not running |
 | `PreToolUse` (other)    |  7  | sticky    | safe default for unknown tools                          |
-| `PostToolUse`           | -1  | release   | clear sticky lock, let next event pick                  |
+| `PostToolUse`           | -1  | release   | Claude clears sticky lock; Codex keeps its current work row until the next event |
 | `Notification`          |  6  | sticky    | permission prompt — pet visibly waits                   |
 | `Stop`, `SubagentStop`  |  3  | transient | wave goodbye / done                                     |
 | `PreCompact`            |  8  | sticky    | reviewing/condensing — fits "review"                    |
@@ -41,6 +41,8 @@ The fixed row layout (from
   release is sent. Used for ongoing states (thinking, working).
 - **release** — clears any sticky lock without forcing a new state. Daemon
   drops back to idle, but does not interrupt a transient that is still playing.
+  Codex `PostToolUse` is the exception: it keeps the current work row alive so
+  internal tool boundaries do not flash the idle/blinking row.
 
 ## What we deliberately don't do
 

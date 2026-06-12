@@ -17,6 +17,10 @@ let package = Package(
         .executableTarget(
             name: "clawdex",
             path: "Sources/ClawdexCLI"
+        ),
+        .testTarget(
+            name: "ClawdexAppTests",
+            dependencies: ["clawdexd"]
         )
     ]
 )

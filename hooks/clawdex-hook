@@ -107,7 +107,8 @@ case "$EVENT" in
     esac ;;
   PostToolUse)
     # Don't fight other state — let UserPromptSubmit's "review" or Stop's
-    # "waving" take over. Send a soft "release sticky" hint.
+    # "waving" take over. The daemon keeps Codex's current work row alive here
+    # so it does not blink idle between internal tool turns.
     ROW=-1; MODE=release ;;
   Notification|PermissionRequest)
     # Claude fires Notification; Codex fires PermissionRequest. Same meaning.

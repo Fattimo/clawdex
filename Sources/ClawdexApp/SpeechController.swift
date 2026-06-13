@@ -148,21 +148,7 @@ final class SpeechController {
         // Done before the prose guard below so readiness tracks even when
         // there's nothing new to say.
         if config.showSwitchboard, !src.isEmpty {
-            let lit: Bool?
-            switch event {
-            case "Stop":
-                lit = true
-            case "SessionStart", "UserPromptSubmit", "PreToolUse",
-                 "PreCompact", "PostCompact":
-                lit = false
-            default:
-                // Notification / PermissionRequest / SubagentStop: leave the
-                // pill as-is. Claude fires Notification ("waiting for you")
-                // after a finished turn — dimming there would un-light a ready
-                // session. Codex's PermissionRequest fires mid-work, where
-                // PreToolUse has already dimmed the pill, so it stays dim.
-                lit = nil
-            }
+            let lit = Self.litState(for: event, agent: agentTag)
             updatePill(source: src, label: label, root: root ?? "",
                        threadID: threadID, transcriptPath: transcriptPath ?? "",
                        lit: lit)
@@ -331,6 +317,44 @@ final class SpeechController {
     }
 
     // MARK: - Switchboard
+
+    /// Map a hook event to a pill's lit state. Returns `nil` to leave the pill
+    /// as it is. Claude and Codex expose readiness differently, so each gets its
+    /// own model rather than one shared switch:
+    ///
+    /// - Claude tells us directly when it's waiting on you. A fresh/cleared
+    ///   session (SessionStart) is parked on your first prompt, Stop ends a turn,
+    ///   and Notification is "waiting for you" — all lit. Working events dim it.
+    /// - Codex has no waiting-on-you event we can trust: its PermissionRequest
+    ///   fires mid-turn while it keeps working, and it emits no Stop on a user
+    ///   abort (the transcript abort marker covers that, see checkForAbortedTurns).
+    ///   So only Stop lights it; everything ambiguous is left as-is.
+    static func litState(for event: String, agent: String) -> Bool? {
+        if agent == "codex" {
+            switch event {
+            case "Stop":
+                return true
+            case "SessionStart", "UserPromptSubmit", "PreToolUse",
+                 "PreCompact", "PostCompact":
+                return false
+            default:
+                // Notification / PermissionRequest / PostToolUse / SubagentStop:
+                // leave the pill as-is. PermissionRequest mid-work stays dim
+                // (PreToolUse already dimmed it); a PostToolUse trailing a Stop
+                // must not re-dim a finished turn.
+                return nil
+            }
+        }
+        // Claude (and any unknown agent): the original waiting-on-you model.
+        switch event {
+        case "SessionStart", "Stop", "Notification":
+            return true
+        case "UserPromptSubmit", "PreToolUse", "PostToolUse", "PreCompact":
+            return false
+        default:
+            return nil   // SubagentStop, PostCompact, etc: leave the pill as-is
+        }
+    }
 
     /// Create-or-update a session's pill and (optionally) flip its lit state.
     private func updatePill(source: String, label: String, root: String,

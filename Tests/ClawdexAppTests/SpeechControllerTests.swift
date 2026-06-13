@@ -3,6 +3,77 @@ import XCTest
 @testable import clawdexd
 
 final class SpeechControllerTests: XCTestCase {
+    func testMessageVisibilityNoneSuppressesBubbles() throws {
+        let pet = PetWindow()
+        let speech = SpeechController(
+            pet: pet,
+            config: ClawdexConfig(messageVisibility: .none, showSwitchboard: false)
+        )
+
+        speech.handle(event: "Stop", narration: "done",
+                      transcriptPath: nil, source: "app", root: "/tmp/app", agent: "codex")
+        RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+
+        XCTAssertEqual(pet.childWindows?.count ?? 0, 0)
+    }
+
+    func testFinalOnlySuppressesNonFinalMessagesButShowsStop() throws {
+        let pet = PetWindow()
+        let speech = SpeechController(
+            pet: pet,
+            config: ClawdexConfig(messageVisibility: .finalOnly, showSwitchboard: false)
+        )
+
+        speech.handle(event: "PreToolUse", narration: "working",
+                      transcriptPath: nil, source: "app", root: "/tmp/app", agent: "codex")
+        RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+        XCTAssertEqual(pet.childWindows?.count ?? 0, 0)
+
+        speech.handle(event: "Stop", narration: "done",
+                      transcriptPath: nil, source: "app", root: "/tmp/app", agent: "codex")
+        RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+        XCTAssertEqual(pet.childWindows?.count ?? 0, 1)
+    }
+
+    func testFinalOnlyDoesNotConsumeIntermediateProseBeforeStop() throws {
+        let pet = PetWindow()
+        let speech = SpeechController(
+            pet: pet,
+            config: ClawdexConfig(messageVisibility: .finalOnly, showSwitchboard: false)
+        )
+        let transcript = FileManager.default.temporaryDirectory
+            .appendingPathComponent("clawdex-final-only-\(UUID().uuidString).jsonl")
+        defer { try? FileManager.default.removeItem(at: transcript) }
+        let line = #"{"type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"finished"}]}}"#
+        try line.write(to: transcript, atomically: true, encoding: .utf8)
+
+        speech.handle(event: "PreToolUse", narration: nil,
+                      transcriptPath: transcript.path, source: "app",
+                      root: "/tmp/app", agent: "codex")
+        RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+        XCTAssertEqual(pet.childWindows?.count ?? 0, 0)
+
+        speech.handle(event: "Stop", narration: nil,
+                      transcriptPath: transcript.path, source: "app",
+                      root: "/tmp/app", agent: "codex")
+        RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+        XCTAssertEqual(pet.childWindows?.count ?? 0, 1)
+    }
+
+    func testHiddenSwitchboardSuppressesPills() throws {
+        let pet = PetWindow()
+        let speech = SpeechController(
+            pet: pet,
+            config: ClawdexConfig(messageVisibility: .none, showSwitchboard: false)
+        )
+
+        speech.handle(event: "UserPromptSubmit", narration: "thinking...",
+                      transcriptPath: nil, source: "app", root: "/tmp/app", agent: "codex")
+        RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+
+        XCTAssertEqual(pet.childWindows?.count ?? 0, 0)
+    }
+
     func testPermissionRequestKeepsPillDimUntilFinalResponse() throws {
         let pet = PetWindow()
         let speech = SpeechController(pet: pet)

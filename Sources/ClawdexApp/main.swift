@@ -12,13 +12,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var server: SocketServer!
     private var machine: StateMachine!
     private var speech: SpeechController!
+    private var config = ClawdexConfig()
+    private let settingsPopover = SettingsPopover()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Hide from Dock & Cmd-Tab. LSUIElement set programmatically since we ship
         // a single binary without an Info.plist app bundle.
         NSApp.setActivationPolicy(.accessory)
 
-        window = PetWindow()
+        if let loaded = try? ClawdexConfig.load() {
+            config = loaded
+        }
+
+        window = PetWindow(scale: config.petScale)
 
         // Load the user's saved pet (from a prior `select`) if it still
         // resolves, else the alphabetically-first discovered pet. ClawdexCLI
@@ -34,7 +40,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.async { self?.window.setRow(row) }
         }
 
-        speech = SpeechController(pet: window)
+        speech = SpeechController(pet: window, config: config)
+        window.onSettings = { [weak self] view, rect in
+            guard let self else { return }
+            self.settingsPopover.show(from: view, rect: rect, config: self.config)
+        }
+        window.onScaleChanged = { [weak self] scale in
+            guard let self else { return }
+            self.config.petScale = scale
+            self.saveConfig()
+        }
+        settingsPopover.onChange = { [weak self] config in
+            guard let self else { return }
+            self.config = config
+            self.saveConfig()
+            self.speech.updateConfig(config)
+        }
 
         let sockPath = ProcessInfo.processInfo.environment["CLAWDEX_SOCK"]
             ?? (NSHomeDirectory() + "/.clawdex/sock")
@@ -104,6 +125,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let source: String?
         let root: String?
         let agent: String?
+    }
+
+    private func saveConfig() {
+        do {
+            try config.save()
+        } catch {
+            NSLog("clawdex: failed to save config: \(error)")
+        }
     }
 }
 

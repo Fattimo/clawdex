@@ -23,10 +23,16 @@ final class PetWindow: NSPanel {
     /// Fired while/after the pet is dragged so attached overlays (the badge)
     /// can re-evaluate which side of the pet they belong on.
     var onMoved: (() -> Void)?
+    /// Fired when the hover-revealed settings button is clicked.
+    var onSettings: ((NSView, NSRect) -> Void)?
+    /// Fired after a resize drag settles on a new scale.
+    var onScaleChanged: ((CGFloat) -> Void)?
 
     /// On-screen scale. 0.5 → pixel-perfect on Retina (1 source px = 1 native px).
     /// 1.0 → 2× pixel-doubled (still crisp via nearest-neighbor + contentsScale).
-    private let scale: CGFloat
+    private var scale: CGFloat
+    private var resizeStartScale: CGFloat?
+    private weak var controlsView: PetControlsView?
 
     init(scale: CGFloat = 0.75) {
         self.scale = scale
@@ -61,6 +67,24 @@ final class PetWindow: NSPanel {
         host.petWindow = self
         host.wantsLayer = true
         host.layer?.addSublayer(spriteLayer)
+
+        let controls = PetControlsView(frame: NSRect(x: frame.width - PetControlsView.width - 4,
+                                                     y: 4,
+                                                     width: PetControlsView.width,
+                                                     height: PetControlsView.height))
+        controls.autoresizingMask = [.minXMargin, .maxYMargin]
+        controls.onSettings = { [weak self, weak controls] in
+            guard let self, let controls else { return }
+            self.onSettings?(controls, controls.settingsRect)
+        }
+        controls.onResizeStart = { [weak self] in self?.beginResize() }
+        controls.onResizeChanged = { [weak self] dx in self?.resize(by: dx) }
+        controls.onResizeEnd = { [weak self] in self?.endResize() }
+        controls.alphaValue = 0
+        controls.isHidden = true
+        host.addSubview(controls)
+        host.controlsView = controls
+        self.controlsView = controls
         contentView = host
 
         spriteLayer.frame = frame
@@ -163,20 +187,85 @@ final class PetWindow: NSPanel {
 
     func wake() { orderFrontRegardless() }
     func tuck() { orderOut(nil) }
+
+    func setScale(_ newScale: CGFloat) {
+        let clamped = min(max(newScale, 0.5), 1.5)
+        guard clamped != scale else { return }
+        scale = clamped
+        let size = NSSize(width: AnimationConstants.cellWidth * scale,
+                          height: AnimationConstants.cellHeight * scale)
+        setFrame(NSRect(origin: frame.origin, size: size), display: true)
+        contentView?.frame = NSRect(origin: .zero, size: size)
+        spriteLayer.frame = NSRect(origin: .zero, size: size)
+        onMoved?()
+    }
+
+    private func beginResize() {
+        resizeStartScale = scale
+    }
+
+    private func resize(by deltaX: CGFloat) {
+        guard let start = resizeStartScale else { return }
+        setScale(start + deltaX / AnimationConstants.cellWidth)
+    }
+
+    private func endResize() {
+        guard resizeStartScale != nil else { return }
+        resizeStartScale = nil
+        onScaleChanged?(scale)
+    }
 }
 
 /// Content view that turns mouse-down + drag into window-move events,
 /// and feeds direction info back to the PetWindow so the sprite animates.
 final class PetView: NSView {
     weak var petWindow: PetWindow?
+    weak var controlsView: PetControlsView?
 
     private var initialMouseLocation: NSPoint?
     private var initialWindowOrigin: NSPoint?
     private var lastMouseLocation: NSPoint?
+    private var trackingArea: NSTrackingArea?
+    private var controlsVisible = false
 
     /// Accept clicks even when the pet's window isn't key (it never is —
     /// it's a non-activating panel).
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let trackingArea {
+            removeTrackingArea(trackingArea)
+        }
+        let trackingArea = NSTrackingArea(
+            rect: .zero,
+            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(trackingArea)
+        self.trackingArea = trackingArea
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        setControlsVisible(true)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        setControlsVisible(false)
+    }
+
+    private func setControlsVisible(_ visible: Bool) {
+        guard let controlsView else { return }
+        controlsVisible = visible
+        controlsView.isHidden = false
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.12
+            controlsView.animator().alphaValue = visible ? 1 : 0
+        } completionHandler: {
+            controlsView.isHidden = !self.controlsVisible
+        }
+    }
 
     override func mouseDown(with event: NSEvent) {
         guard let window = self.window else { return }
@@ -208,5 +297,81 @@ final class PetView: NSView {
         initialWindowOrigin = nil
         lastMouseLocation = nil
         petWindow?.dragEnded()
+    }
+}
+
+/// Compact hover controls rendered over the pet's lower-right corner.
+final class PetControlsView: NSView {
+    static let buttonSize: CGFloat = 18
+    static let gap: CGFloat = 3
+    static let width: CGFloat = buttonSize * 2 + gap
+    static let height: CGFloat = buttonSize
+
+    var onSettings: (() -> Void)?
+    var onResizeStart: (() -> Void)?
+    var onResizeChanged: ((CGFloat) -> Void)?
+    var onResizeEnd: (() -> Void)?
+
+    private var resizeStartX: CGFloat?
+
+    var settingsRect: NSRect {
+        NSRect(x: 0, y: 0, width: Self.buttonSize, height: Self.buttonSize)
+    }
+
+    private var resizeRect: NSRect {
+        NSRect(x: Self.buttonSize + Self.gap, y: 0,
+               width: Self.buttonSize, height: Self.buttonSize)
+    }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override func mouseDown(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        if settingsRect.contains(point) {
+            onSettings?()
+            return
+        }
+        if resizeRect.contains(point) {
+            resizeStartX = NSEvent.mouseLocation.x
+            onResizeStart?()
+        }
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard let startX = resizeStartX else { return }
+        onResizeChanged?(NSEvent.mouseLocation.x - startX)
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        guard resizeStartX != nil else { return }
+        resizeStartX = nil
+        onResizeEnd?()
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let dark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        let fill = dark ? NSColor(white: 0.10, alpha: 0.82) : NSColor(white: 0.98, alpha: 0.86)
+        let stroke = dark ? NSColor(white: 0.9, alpha: 0.22) : NSColor(white: 0.1, alpha: 0.16)
+        for rect in [settingsRect, resizeRect] {
+            let path = NSBezierPath(roundedRect: rect, xRadius: 5, yRadius: 5)
+            fill.setFill()
+            path.fill()
+            stroke.setStroke()
+            path.lineWidth = 1
+            path.stroke()
+        }
+
+        drawSymbol(name: "gearshape.fill", in: settingsRect.insetBy(dx: 4, dy: 4))
+        drawSymbol(name: "arrow.up.left.and.arrow.down.right", in: resizeRect.insetBy(dx: 4, dy: 4))
+    }
+
+    private func drawSymbol(name: String, in rect: NSRect) {
+        guard let image = NSImage(systemSymbolName: name, accessibilityDescription: nil) else { return }
+        image.isTemplate = true
+        let color = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            ? NSColor.white.withAlphaComponent(0.92)
+            : NSColor.black.withAlphaComponent(0.72)
+        color.set()
+        image.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1)
     }
 }

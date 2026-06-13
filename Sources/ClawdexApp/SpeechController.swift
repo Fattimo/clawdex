@@ -16,6 +16,7 @@ import Foundation
 ///      mid-tool-call.
 final class SpeechController {
     private weak var pet: PetWindow?
+    private var config: ClawdexConfig
 
     private final class Bubble {
         let window = SpeechBubbleWindow()
@@ -88,8 +89,9 @@ final class SpeechController {
         return c
     }
 
-    init(pet: PetWindow) {
+    init(pet: PetWindow, config: ClawdexConfig = ClawdexConfig()) {
         self.pet = pet
+        self.config = config
         // Keep the switchboard glued to the pet (and on the correct side) as it
         // is dragged around the screen.
         pet.onMoved = { [weak self] in self?.relayoutPills() }
@@ -102,6 +104,16 @@ final class SpeechController {
         // transcript bytes as the narrow fallback for returning to ready.
         Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             self?.checkForAbortedTurns()
+        }
+    }
+
+    func updateConfig(_ config: ClawdexConfig) {
+        self.config = config
+        if !config.showSwitchboard {
+            removeAllPills()
+        }
+        if config.messageVisibility != .all {
+            removeAllBubbles()
         }
     }
 
@@ -135,7 +147,7 @@ final class SpeechController {
         // leaves the current readiness alone.
         // Done before the prose guard below so readiness tracks even when
         // there's nothing new to say.
-        if !src.isEmpty {
+        if config.showSwitchboard, !src.isEmpty {
             let lit: Bool?
             switch event {
             case "Stop":
@@ -170,7 +182,12 @@ final class SpeechController {
         var toShow: String?
         if proseEvent, let path = transcriptPath, !path.isEmpty,
            let prose = Self.latestAssistantText(path: path), prose != lastProse[src] {
-            lastProse[src] = prose
+            // Final-only mode intentionally ignores intermediate prose, but it
+            // must not consume it from the dedup cache before Stop gets to show
+            // the same completed answer.
+            if config.messageVisibility == .all || event == "Stop" {
+                lastProse[src] = prose
+            }
             toShow = prose
         } else if let n = narration, !n.isEmpty {
             toShow = n
@@ -178,8 +195,21 @@ final class SpeechController {
         guard let text = toShow else { return }
         // The final turn response arrives on Stop (agent done, ready to reprompt);
         // everything else is filler and gets a muted treatment.
+        let isFinal = event == "Stop"
+        guard shouldShowMessage(isFinal: isFinal) else { return }
         show(source: src, label: label, root: root ?? "", threadID: threadID,
-             text: text, isFinal: event == "Stop")
+             text: text, isFinal: isFinal)
+    }
+
+    private func shouldShowMessage(isFinal: Bool) -> Bool {
+        switch config.messageVisibility {
+        case .all:
+            return true
+        case .finalOnly:
+            return isFinal
+        case .none:
+            return false
+        }
     }
 
     private func show(source: String, label: String, root: String, threadID: String,
@@ -359,6 +389,24 @@ final class SpeechController {
         pillOrder.removeAll { $0 == source }
         pill.window.fadeOut()
         relayoutPills()
+    }
+
+    private func removeAllPills() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            for source in self.pillOrder {
+                self.removePillOnMain(source: source)
+            }
+        }
+    }
+
+    private func removeAllBubbles() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            for source in self.order {
+                self.expire(source: source)
+            }
+        }
     }
 
     private func checkForAbortedTurns() {

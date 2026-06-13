@@ -39,9 +39,13 @@ final class SpeechController {
         let window = PillWindow()
         var size: NSSize = .zero
         var lit = false
+        var label = ""
         var root = ""
         var threadID = ""   // Codex conversation id, for the deep link
         var lastSeen = Date()
+        var transcriptPath = ""
+        var transcriptOffset: UInt64 = 0
+        var transcriptTail = ""
     }
     private var pillOrder: [String] = []        // oldest → newest, bottom → top
     private var pills: [String: Pill] = [:]
@@ -93,6 +97,12 @@ final class SpeechController {
         Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
             self?.prunePills()
         }
+        // Codex does not currently emit a hook for a user-aborted turn. Its
+        // transcript does gain a small abort marker, so watch appended
+        // transcript bytes as the narrow fallback for returning to ready.
+        Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+            self?.checkForAbortedTurns()
+        }
     }
 
     /// Feed one socket event. `narration`, `transcriptPath`, and `source` are
@@ -120,8 +130,9 @@ final class SpeechController {
 
         // Switchboard pill. Only Stop means the agent has actually finished a
         // turn and is ready for the next prompt. Session startup, permission
-        // requests, and tool activity all stay dim so in-flight work does not
-        // flicker as ready.
+        // requests, and tool starts stay dim so in-flight work does not flicker
+        // as ready. PostToolUse is only a boundary between tool calls, so it
+        // leaves the current readiness alone.
         // Done before the prose guard below so readiness tracks even when
         // there's nothing new to say.
         if !src.isEmpty {
@@ -130,14 +141,15 @@ final class SpeechController {
             case "Stop":
                 lit = true
             case "SessionStart", "Notification", "PermissionRequest",
-                 "UserPromptSubmit", "PreToolUse", "PostToolUse",
+                 "UserPromptSubmit", "PreToolUse",
                  "PreCompact", "PostCompact":
                 lit = false
             default:
                 lit = nil   // SubagentStop and others: leave the pill as-is
             }
             updatePill(source: src, label: label, root: root ?? "",
-                       threadID: threadID, lit: lit)
+                       threadID: threadID, transcriptPath: transcriptPath ?? "",
+                       lit: lit)
         }
 
         // A user prompt (or session start) begins a NEW turn: there's no new
@@ -288,7 +300,7 @@ final class SpeechController {
 
     /// Create-or-update a session's pill and (optionally) flip its lit state.
     private func updatePill(source: String, label: String, root: String,
-                            threadID: String, lit: Bool?) {
+                            threadID: String, transcriptPath: String, lit: Bool?) {
         DispatchQueue.main.async { [weak self] in
             guard let self = self, let pet = self.pet else { return }
             let pill: Pill
@@ -302,8 +314,14 @@ final class SpeechController {
                 self.pills[source] = pill
                 self.pillOrder.append(source)
             }
+            pill.label = label
             if !root.isEmpty { pill.root = root }
             if !threadID.isEmpty { pill.threadID = threadID }
+            if !transcriptPath.isEmpty {
+                pill.transcriptPath = transcriptPath
+                pill.transcriptOffset = Self.transcriptSize(path: transcriptPath)
+                pill.transcriptTail = ""
+            }
             pill.lastSeen = Date()
             if let lit = lit { pill.lit = lit }
             pill.size = pill.window.setContent(label: label, lit: pill.lit,
@@ -341,6 +359,52 @@ final class SpeechController {
         pillOrder.removeAll { $0 == source }
         pill.window.fadeOut()
         relayoutPills()
+    }
+
+    private func checkForAbortedTurns() {
+        for source in pillOrder {
+            guard let pill = pills[source], !pill.lit, !pill.transcriptPath.isEmpty else { continue }
+            let update = Self.abortMarkerUpdate(path: pill.transcriptPath,
+                                                offset: pill.transcriptOffset,
+                                                tail: pill.transcriptTail)
+            pill.transcriptOffset = update.offset
+            pill.transcriptTail = update.tail
+            guard update.found else { continue }
+
+            pill.lit = true
+            pill.lastSeen = Date()
+            pill.size = pill.window.setContent(label: pill.label, lit: true,
+                                               accent: self.color(for: source))
+            relayoutPills()
+            pill.window.fadeIn()
+        }
+    }
+
+    private static func transcriptSize(path: String) -> UInt64 {
+        guard let fh = FileHandle(forReadingAtPath: path) else { return 0 }
+        defer { try? fh.close() }
+        return (try? fh.seekToEnd()) ?? 0
+    }
+
+    private static func abortMarkerUpdate(path: String, offset: UInt64,
+                                          tail: String) -> (found: Bool, offset: UInt64, tail: String) {
+        guard let fh = FileHandle(forReadingAtPath: path) else {
+            return (false, offset, tail)
+        }
+        defer { try? fh.close() }
+
+        let size = (try? fh.seekToEnd()) ?? offset
+        guard size > offset else {
+            return size < offset ? (false, size, "") : (false, size, tail)
+        }
+        try? fh.seek(toOffset: offset)
+        guard let data = try? fh.readToEnd(), !data.isEmpty else {
+            return (false, size, tail)
+        }
+
+        let chunk = String(decoding: data, as: UTF8.self)
+        let scan = tail + chunk
+        return (scan.contains("<turn_aborted>"), size, String(scan.suffix(128)))
     }
 
     /// Stack the pills vertically beside the pet, bottom-aligned with the pet's

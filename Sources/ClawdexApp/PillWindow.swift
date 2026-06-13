@@ -4,9 +4,9 @@ import AppKit
 ///
 /// Shows a colored dot + the project name, in that session's stable accent
 /// color (the same color its speech bubble uses, so the two read as one
-/// system). "Lit" means the session is waiting on you (finished its turn, or
-/// asking for input) — drawn bright with an accent tint and ring. "Dim" means
-/// it's working — the pill recedes. Clicking focuses that project's Zed window;
+/// system). "Lit" means the session has finished its turn — drawn bright with
+/// an accent tint and ring. "Dim" means it's still working or waiting on a
+/// tool — the pill recedes. Clicking focuses that project's Zed window;
 /// hovering reveals a tiny ✕ for dismissing a stale pill.
 ///
 /// Added as a child window of the pet so it follows drags; the switchboard

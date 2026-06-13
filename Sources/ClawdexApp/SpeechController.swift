@@ -31,8 +31,8 @@ final class SpeechController {
     private var lastProse: [String: String] = [:]
 
     /// Agent-readiness switchboard: one pill per active session, stacked
-    /// vertically beside the pet. A pill is "lit" while its session waits on you
-    /// (finished a turn, or asking for input) and "dim" while it's working.
+    /// vertically beside the pet. A pill is "lit" only once its turn has
+    /// finished and "dim" while it is still working or waiting on a tool.
     /// Pills auto-prune once a session goes quiet (dim + idle past the timeout);
     /// a lit pill never disappears on its own.
     private final class Pill {
@@ -118,18 +118,19 @@ final class SpeechController {
             return
         }
 
-        // Switchboard pill. A fresh session (SessionStart) starts lit — it's
-        // waiting on your first prompt. Stop (turn finished) and Notification
-        // (asking for permission) also light it; any working event dims it.
+        // Switchboard pill. Only Stop means the agent has actually finished a
+        // turn and is ready for the next prompt. Session startup, permission
+        // requests, and tool activity all stay dim so in-flight work does not
+        // flicker as ready.
         // Done before the prose guard below so readiness tracks even when
         // there's nothing new to say.
         if !src.isEmpty {
             let lit: Bool?
             switch event {
-            case "SessionStart", "Stop", "Notification", "PermissionRequest":
-                // Codex fires PermissionRequest where Claude fires Notification.
+            case "Stop":
                 lit = true
-            case "UserPromptSubmit", "PreToolUse", "PostToolUse",
+            case "SessionStart", "Notification", "PermissionRequest",
+                 "UserPromptSubmit", "PreToolUse", "PostToolUse",
                  "PreCompact", "PostCompact":
                 lit = false
             default:

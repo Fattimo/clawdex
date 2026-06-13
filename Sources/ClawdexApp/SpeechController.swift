@@ -152,12 +152,16 @@ final class SpeechController {
             switch event {
             case "Stop":
                 lit = true
-            case "SessionStart", "Notification", "PermissionRequest",
-                 "UserPromptSubmit", "PreToolUse",
+            case "SessionStart", "UserPromptSubmit", "PreToolUse",
                  "PreCompact", "PostCompact":
                 lit = false
             default:
-                lit = nil   // SubagentStop and others: leave the pill as-is
+                // Notification / PermissionRequest / SubagentStop: leave the
+                // pill as-is. Claude fires Notification ("waiting for you")
+                // after a finished turn — dimming there would un-light a ready
+                // session. Codex's PermissionRequest fires mid-work, where
+                // PreToolUse has already dimmed the pill, so it stays dim.
+                lit = nil
             }
             updatePill(source: src, label: label, root: root ?? "",
                        threadID: threadID, transcriptPath: transcriptPath ?? "",

@@ -140,6 +140,26 @@ final class SpeechControllerTests: XCTestCase {
         XCTAssertEqual(pill.alphaValue, 1.0, accuracy: 0.02)
     }
 
+    func testTrailingNotificationAfterStopKeepsPillLit() throws {
+        // Claude fires a "waiting for you" Notification ~60s after a finished
+        // turn. It must not un-light a pill that Stop already lit.
+        let pet = PetWindow()
+        let speech = SpeechController(pet: pet)
+
+        speech.handle(event: "Stop", narration: nil,
+                      transcriptPath: nil, source: "app", root: "/tmp/app", agent: "claude")
+        RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+
+        let pill = try XCTUnwrap(pet.childWindows?.first as? PillWindow)
+        XCTAssertEqual(pill.alphaValue, 1.0, accuracy: 0.02)
+
+        speech.handle(event: "Notification", narration: "waiting for you",
+                      transcriptPath: nil, source: "app", root: "/tmp/app", agent: "claude")
+        RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+
+        XCTAssertEqual(pill.alphaValue, 1.0, accuracy: 0.02)
+    }
+
     func testTurnAbortMarkerRelightsPillWithoutStopHook() throws {
         let pet = PetWindow()
         let speech = SpeechController(pet: pet)

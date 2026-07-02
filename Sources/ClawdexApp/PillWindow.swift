@@ -6,8 +6,9 @@ import AppKit
 /// color (the same color its speech bubble uses, so the two read as one
 /// system). "Lit" means the session has finished its turn — drawn bright with
 /// an accent tint and ring. "Dim" means it's still working or waiting on a
-/// tool — the pill recedes. Clicking focuses that project's Zed window;
-/// hovering reveals a tiny ✕ for dismissing a stale pill.
+/// tool — the pill recedes. Clicking reopens that project in the app the
+/// session was launched from (Claude Desktop, Zed, VS Code, …), or a Codex
+/// thread deep-link; hovering reveals a tiny ✕ for dismissing a stale pill.
 ///
 /// Added as a child window of the pet so it follows drags; the switchboard
 /// stacks these vertically beside the pet.
@@ -17,7 +18,7 @@ final class PillWindow: NSPanel {
     static let height: CGFloat = 24
     static let maxLabelWidth: CGFloat = 160
 
-    /// Invoked when the pill is clicked (focus the project's Zed window).
+    /// Invoked when the pill is clicked (reopen the project in its launching app).
     var onClick: (() -> Void)?
     /// Invoked when the hover-revealed ✕ is clicked.
     var onClose: (() -> Void)?
@@ -34,7 +35,7 @@ final class PillWindow: NSPanel {
         backgroundColor = .clear
         hasShadow = true
         level = .floating
-        ignoresMouseEvents = false          // clickable: focus Zed
+        ignoresMouseEvents = false          // clickable: reopen in launching app
         collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
         hidesOnDeactivate = false
         isReleasedWhenClosed = false

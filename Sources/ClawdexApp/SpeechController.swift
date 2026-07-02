@@ -24,6 +24,7 @@ final class SpeechController {
         var timer: Timer?
         var root: String = ""
         var threadID: String = ""   // Codex conversation id, for the deep link
+        var app: String = ""        // launching app's bundle id, for click-to-open
     }
 
     /// Ordered oldest → newest. Newest stacks highest.
@@ -43,6 +44,7 @@ final class SpeechController {
         var label = ""
         var root = ""
         var threadID = ""   // Codex conversation id, for the deep link
+        var app = ""        // launching app's bundle id, for click-to-open
         var lastSeen = Date()
         var transcriptPath = ""
         var transcriptOffset: UInt64 = 0
@@ -120,7 +122,8 @@ final class SpeechController {
     /// Feed one socket event. `narration`, `transcriptPath`, and `source` are
     /// all optional.
     func handle(event: String, narration: String?, transcriptPath: String?,
-                source: String?, root: String?, agent: String?) {
+                source: String?, root: String?, agent: String?, app: String?) {
+        let launchApp = (app ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let repo = (source ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let agentTag = (agent ?? "claude")
             .trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -151,7 +154,7 @@ final class SpeechController {
             let lit = Self.litState(for: event, agent: agentTag)
             updatePill(source: src, label: label, root: root ?? "",
                        threadID: threadID, transcriptPath: transcriptPath ?? "",
-                       lit: lit)
+                       app: launchApp, lit: lit)
         }
 
         // A user prompt (or session start) begins a NEW turn: there's no new
@@ -188,7 +191,7 @@ final class SpeechController {
         let isFinal = event == "Stop"
         guard shouldShowMessage(isFinal: isFinal) else { return }
         show(source: src, label: label, root: root ?? "", threadID: threadID,
-             text: text, isFinal: isFinal)
+             app: launchApp, text: text, isFinal: isFinal)
     }
 
     private func shouldShowMessage(isFinal: Bool) -> Bool {
@@ -203,7 +206,7 @@ final class SpeechController {
     }
 
     private func show(source: String, label: String, root: String, threadID: String,
-                      text raw: String, isFinal: Bool) {
+                      app: String, text raw: String, isFinal: Bool) {
         let text = Self.clean(raw)
         guard !text.isEmpty else { return }
         DispatchQueue.main.async { [weak self] in
@@ -224,6 +227,7 @@ final class SpeechController {
             }
             if !root.isEmpty { bubble.root = root }
             if !threadID.isEmpty { bubble.threadID = threadID }
+            if !app.isEmpty { bubble.app = app }
 
             bubble.size = bubble.window.setContent(source: label, message: text,
                                                    isFinal: isFinal, accent: self.color(for: source))
@@ -251,10 +255,11 @@ final class SpeechController {
     }
 
     /// Focus the session. Codex sessions deep-link straight to their thread
-    /// (codex://threads/<id>) when we know the id; otherwise — and for Claude —
-    /// open the project folder in the agent's app (Codex Desktop / Zed, both of
-    /// which accept a folder). Pill outlives the bubble, so it's the first
-    /// lookup; the bubble is the fallback.
+    /// (codex://threads/<id>) when we know the id. Otherwise open in the app the
+    /// session was launched from (captured by the hook): editors get the project
+    /// folder; Claude Desktop is just brought to the front (a folder sends it to
+    /// cowork). Falls back to Zed when the launching app is unknown. Pill outlives
+    /// the bubble, so it's the first lookup; the bubble is the fallback.
     private func openProject(source: String) {
         let isCodex = Self.agent(ofKey: source) == "codex"
 
@@ -270,15 +275,44 @@ final class SpeechController {
         guard !root.isEmpty else { return }
         let folder = URL(fileURLWithPath: root)
 
-        let (bundleID, fallbackPath, name): (String, String, String) = isCodex
-            ? ("com.openai.codex", "/Applications/Codex.app", "Codex")
-            : ("dev.zed.Zed", "/Applications/Zed.app", "Zed")
+        // Prefer the app that actually launched the session (the hook captured
+        // it from __CFBundleIdentifier). That way a click reopens the project in
+        // Claude Desktop / VS Code / Zed / whatever you started from, instead of
+        // a hardcoded editor. Empty over ssh/tmux/launchd → fall back to Zed.
+        let launchApp = pills[source]?.app ?? bubbles[source]?.app ?? ""
 
         let ws = NSWorkspace.shared
-        let appURL = ws.urlForApplication(withBundleIdentifier: bundleID)
-            ?? URL(fileURLWithPath: fallbackPath)
+        let appURL: URL
+        let name: String
+        if isCodex {
+            name = "Codex"
+            appURL = ws.urlForApplication(withBundleIdentifier: "com.openai.codex")
+                ?? URL(fileURLWithPath: "/Applications/Codex.app")
+        } else if !launchApp.isEmpty,
+                  let resolved = ws.urlForApplication(withBundleIdentifier: launchApp) {
+            name = launchApp
+            appURL = resolved
+        } else {
+            name = "Zed"
+            appURL = ws.urlForApplication(withBundleIdentifier: "dev.zed.Zed")
+                ?? URL(fileURLWithPath: "/Applications/Zed.app")
+        }
         let cfg = NSWorkspace.OpenConfiguration()
         cfg.activates = true   // bring the app (and that workspace) to the front
+
+        // Claude Desktop hosts its sessions in-app; handing it a folder drops you
+        // in cowork rather than your session, so just bring the app to the front.
+        // Editors (Zed, VS Code, …) do the right thing with a folder — open/focus
+        // that project's window — so keep passing it to them.
+        if launchApp == "com.anthropic.claudefordesktop" {
+            ws.openApplication(at: appURL, configuration: cfg) { _, err in
+                if let err = err {
+                    NSLog("clawdex: failed to focus \(name): \(err.localizedDescription)")
+                }
+            }
+            return
+        }
+
         ws.open([folder], withApplicationAt: appURL, configuration: cfg) { _, err in
             if let err = err {
                 NSLog("clawdex: failed to open \(root) in \(name): \(err.localizedDescription)")
@@ -358,7 +392,8 @@ final class SpeechController {
 
     /// Create-or-update a session's pill and (optionally) flip its lit state.
     private func updatePill(source: String, label: String, root: String,
-                            threadID: String, transcriptPath: String, lit: Bool?) {
+                            threadID: String, transcriptPath: String, app: String,
+                            lit: Bool?) {
         DispatchQueue.main.async { [weak self] in
             guard let self = self, let pet = self.pet else { return }
             let pill: Pill
@@ -375,6 +410,7 @@ final class SpeechController {
             pill.label = label
             if !root.isEmpty { pill.root = root }
             if !threadID.isEmpty { pill.threadID = threadID }
+            if !app.isEmpty { pill.app = app }
             if !transcriptPath.isEmpty {
                 pill.transcriptPath = transcriptPath
                 pill.transcriptOffset = Self.transcriptSize(path: transcriptPath)

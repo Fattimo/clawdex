@@ -66,6 +66,14 @@ TRANSCRIPT="$(json_get transcript_path)"
 CWD="$(json_get cwd)"
 ROOT="$(find_root "$CWD")"
 SOURCE="$(basename_of "$ROOT")"
+# The GUI app that launched this session. macOS LaunchServices stamps the
+# launching app's bundle id into __CFBundleIdentifier, and it propagates down
+# the process tree to us (the hook is a child of the agent, which is a child of
+# the editor/terminal). Lets a pill click reopen the project in the app you
+# actually started from — Claude Desktop (com.anthropic.claudefordesktop), Zed,
+# VS Code, … — instead of a hardcoded editor. Falls back to TERM_PROGRAM; empty
+# over ssh/tmux/launchd, which the daemon reads as "use the default editor".
+APP="${__CFBundleIdentifier:-$TERM_PROGRAM}"
 
 # JSON-escape a string for embedding in our one-line message. No jq — pure
 # sed/tr. Backslash first, then quote, then strip control chars.
@@ -166,7 +174,8 @@ TEXT="$(json_escape_short "$NARRATION")"
 TRANSCRIPT_ESC="$(json_escape "$TRANSCRIPT")"
 SOURCE_ESC="$(json_escape_short "$SOURCE")"
 ROOT_ESC="$(json_escape "$ROOT")"
-MSG="{\"event\":\"$EVENT\",\"agent\":\"$AGENT\",\"tool\":\"$TOOL\",\"row\":$ROW,\"mode\":\"$MODE\",\"ttl\":$TTL,\"text\":\"$TEXT\",\"transcript\":\"$TRANSCRIPT_ESC\",\"source\":\"$SOURCE_ESC\",\"root\":\"$ROOT_ESC\",\"ts\":$TS}"
+APP_ESC="$(json_escape "$APP")"
+MSG="{\"event\":\"$EVENT\",\"agent\":\"$AGENT\",\"tool\":\"$TOOL\",\"row\":$ROW,\"mode\":\"$MODE\",\"ttl\":$TTL,\"text\":\"$TEXT\",\"transcript\":\"$TRANSCRIPT_ESC\",\"source\":\"$SOURCE_ESC\",\"root\":\"$ROOT_ESC\",\"app\":\"$APP_ESC\",\"ts\":$TS}"
 
 # Best-effort send. If the daemon isn't running, exit silently. Use a short
 # timeout via the OS rather than nc flags (varies between BSD nc and ncat).

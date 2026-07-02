@@ -111,7 +111,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
            let s = try? JSONDecoder().decode(SpeechLine.self, from: data) {
             speech.handle(event: s.event ?? "", narration: s.text,
                           transcriptPath: s.transcript, source: s.source,
-                          root: s.root, agent: s.agent)
+                          root: s.root, agent: s.agent, app: s.app)
         }
 
         machine.ingest(line)
@@ -125,6 +125,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let source: String?
         let root: String?
         let agent: String?
+        let app: String?   // launching app's bundle id (from the hook)
     }
 
     private func saveConfig() {

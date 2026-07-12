@@ -313,6 +313,16 @@ final class SpeechController {
             return
         }
 
+        // A stale pill can outlive its project folder — a deleted git worktree, a
+        // temp dir, an unmounted volume. Handing NSWorkspace a path that's gone
+        // makes macOS pop a "'<folder>' can't be found" alert, which is just noise
+        // when the session no longer exists. Skip the open in that case; the pill
+        // can still be dismissed with its ✕.
+        guard FileManager.default.fileExists(atPath: root) else {
+            NSLog("clawdex: skip open, folder gone: \(root)")
+            return
+        }
+
         ws.open([folder], withApplicationAt: appURL, configuration: cfg) { _, err in
             if let err = err {
                 NSLog("clawdex: failed to open \(root) in \(name): \(err.localizedDescription)")

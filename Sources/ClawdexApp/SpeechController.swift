@@ -56,6 +56,7 @@ final class SpeechController {
         var threadID = ""   // Codex conversation id, for the deep link
         var app = ""        // launching app's bundle id, for click-to-open
         var kitty = KittyTarget()   // kitty window to focus, when launched in kitty
+        var paintedLit: Bool?       // last readiness painted onto the kitty tab
         var lastSeen = Date()
         var transcriptPath = ""
         var transcriptOffset: UInt64 = 0
@@ -133,7 +134,7 @@ final class SpeechController {
     /// Feed one socket event. `narration`, `transcriptPath`, and `source` are
     /// all optional.
     func handle(event: String, narration: String?, transcriptPath: String?,
-                source: String?, root: String?, agent: String?, app: String?,
+                source: String?, root: String?, agent: String?, app: String? = nil,
                 kitty: KittyTarget = KittyTarget()) {
         let launchApp = (app ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let repo = (source ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
@@ -380,31 +381,148 @@ final class SpeechController {
         return "unix:" + path
     }
 
-    /// Ask kitty to focus the session's window (and so its tab). Best-effort:
-    /// runs kitten directly (argv, no shell) off the main thread.
+    /// Ask kitty to focus the session's window (and so its tab).
     private static func focusKitty(_ k: KittyTarget, appURL: URL) {
-        guard !k.window.isEmpty, k.window.allSatisfy(\.isASCII), k.window.allSatisfy(\.isNumber),
-              let sock = kittySocket(k) else {
-            NSLog("clawdex: no kitty socket for window \(k.window); set listen_on in kitty.conf")
-            return
+        runKitten(k, ["focus-window", "--match", "id:" + k.window])
+    }
+
+    /// Mirror the pill onto the session's kitty tab: the switchboard accent
+    /// and a ● marker when ready for you, neutral near-black and a ○ while
+    /// it's working. Only
+    /// repaints on a readiness change, so busy sessions don't spawn a kitten
+    /// per hook event.
+    private func paintKittyTab(_ pill: Pill, source: String) {
+        guard !pill.kitty.isEmpty, pill.paintedLit != pill.lit else { return }
+        pill.paintedLit = pill.lit
+        let accent = Self.rgb(color(for: source))
+        let colors: [String]
+        if pill.lit {
+            colors = ["active_bg=" + Self.hex(accent),
+                      "active_fg=#ffffff",
+                      "inactive_bg=" + Self.hex(Self.mix(accent, (0, 0, 0), 0.5)),
+                      "inactive_fg=#d0d0d0"]
+        } else {
+            // Working: a neutral near-black reserved for busy sessions, so it
+            // never reads as any session's accent.
+            colors = ["active_bg=#2a2a2a",
+                      "active_fg=#b0b0b0",
+                      "inactive_bg=#141414",
+                      "inactive_fg=#6a6a6a"]
         }
-        let kitten = appURL.appendingPathComponent("Contents/MacOS/kitten")
-        DispatchQueue.global(qos: .userInitiated).async {
-            let p = Process()
-            p.executableURL = kitten
-            p.arguments = ["@", "--to", sock, "focus-window", "--match", "id:" + k.window]
-            p.standardInput = FileHandle.nullDevice
-            p.standardOutput = FileHandle.nullDevice
-            p.standardError = FileHandle.nullDevice
-            do {
-                try p.run()
-                p.waitUntilExit()
-                if p.terminationStatus != 0 {
-                    NSLog("clawdex: kitten focus-window id:\(k.window) exited \(p.terminationStatus)")
-                }
-            } catch {
-                NSLog("clawdex: failed to run kitten: \(error.localizedDescription)")
+        Self.runKitten(pill.kitty, ["set-tab-color", "--match", "window_id:" + pill.kitty.window] + colors)
+        Self.markKittyTab(pill.kitty, marker: pill.lit ? Self.readyMarker : Self.workingMarker)
+    }
+
+    private static let readyMarker = "●"
+    private static let workingMarker = "○"
+
+    /// The tab's own title (e.g. the session file's `new_tab app`), captured the
+    /// first time we mark it so the marker can be swapped or removed without
+    /// clobbering the name. Keyed by "<kitty pid>:<window id>"; kittyQueue only.
+    private static var kittyBaseTitles: [String: String] = [:]
+
+    /// Prefix the session's kitty tab title with `marker`, or restore the plain
+    /// title when `marker` is nil.
+    private static func markKittyTab(_ k: KittyTarget, marker: String?) {
+        guard let sock = kittyTarget(k) else { return }
+        kittyQueue.async {
+            let key = k.pid + ":" + k.window
+            if kittyBaseTitles[key] == nil {
+                guard let out = execKitten(sock, ["ls", "--match", "id:" + k.window]),
+                      let title = tabTitle(fromLS: out) else { return }
+                kittyBaseTitles[key] = stripMarker(title)
             }
+            guard let base = kittyBaseTitles[key] else { return }
+            let title = marker.map { $0 + " " + base } ?? base
+            if marker == nil { kittyBaseTitles[key] = nil }
+            _ = execKitten(sock, ["set-tab-title", "--match", "window_id:" + k.window, title])
+        }
+    }
+
+    private static func stripMarker(_ title: String) -> String {
+        for m in [readyMarker, workingMarker] where title.hasPrefix(m + " ") {
+            return String(title.dropFirst(m.count + 1))
+        }
+        return title
+    }
+
+    /// Title of the (single) tab in `kitten @ ls --match id:N` output.
+    private static func tabTitle(fromLS data: Data) -> String? {
+        guard let osWindows = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]],
+              let tabs = osWindows.first?["tabs"] as? [[String: Any]],
+              let title = tabs.first?["title"] as? String else { return nil }
+        return title
+    }
+
+    private static func rgb(_ c: NSColor) -> (Double, Double, Double) {
+        // System colors are dynamic; resolve them as they look in dark mode,
+        // which is what a terminal tab bar sits against.
+        var out: (Double, Double, Double) = (0.5, 0.5, 0.5)
+        NSAppearance(named: .darkAqua)?.performAsCurrentDrawingAppearance {
+            if let s = c.usingColorSpace(.sRGB) {
+                out = (Double(s.redComponent), Double(s.greenComponent), Double(s.blueComponent))
+            }
+        }
+        return out
+    }
+
+    /// Blend `a` toward `b` by `t` (0 = a, 1 = b).
+    private static func mix(_ a: (Double, Double, Double), _ b: (Double, Double, Double),
+                            _ t: Double) -> (Double, Double, Double) {
+        (a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t, a.2 + (b.2 - a.2) * t)
+    }
+
+    private static func hex(_ c: (Double, Double, Double)) -> String {
+        func byte(_ v: Double) -> Int { Int((min(max(v, 0), 1) * 255).rounded()) }
+        return String(format: "#%02x%02x%02x", byte(c.0), byte(c.1), byte(c.2))
+    }
+
+    private static let kittenURL: URL? = NSWorkspace.shared
+        .urlForApplication(withBundleIdentifier: kittyBundleID)?
+        .appendingPathComponent("Contents/MacOS/kitten")
+
+    /// Serializes kitten calls so a session's color/title updates land in order.
+    private static let kittyQueue = DispatchQueue(label: "clawdex.kitty", qos: .userInitiated)
+
+    /// Validated socket for the session's kitty, or nil (logged) if unreachable.
+    private static func kittyTarget(_ k: KittyTarget) -> String? {
+        guard !k.window.isEmpty, k.window.allSatisfy(\.isASCII), k.window.allSatisfy(\.isNumber),
+              let sock = kittySocket(k), kittenURL != nil else {
+            NSLog("clawdex: no kitty socket for window \(k.window); set listen_on in kitty.conf")
+            return nil
+        }
+        return sock
+    }
+
+    /// Run a `kitten @` remote-control command against the session's kitty.
+    /// Best-effort, fire-and-forget.
+    private static func runKitten(_ k: KittyTarget, _ args: [String]) {
+        guard let sock = kittyTarget(k) else { return }
+        kittyQueue.async { _ = execKitten(sock, args) }
+    }
+
+    /// Run kitten synchronously (argv only, no shell); stdout on success.
+    private static func execKitten(_ sock: String, _ args: [String]) -> Data? {
+        guard let kitten = kittenURL else { return nil }
+        let p = Process()
+        p.executableURL = kitten
+        p.arguments = ["@", "--to", sock] + args
+        let out = Pipe()
+        p.standardInput = FileHandle.nullDevice
+        p.standardOutput = out
+        p.standardError = FileHandle.nullDevice
+        do {
+            try p.run()
+            let data = out.fileHandleForReading.readDataToEndOfFile()
+            p.waitUntilExit()
+            guard p.terminationStatus == 0 else {
+                NSLog("clawdex: kitten \(args.first ?? "") exited \(p.terminationStatus)")
+                return nil
+            }
+            return data
+        } catch {
+            NSLog("clawdex: failed to run kitten: \(error.localizedDescription)")
+            return nil
         }
     }
 
@@ -509,6 +627,7 @@ final class SpeechController {
             if let lit = lit { pill.lit = lit }
             pill.size = pill.window.setContent(label: label, lit: pill.lit,
                                                accent: self.color(for: source))
+            self.paintKittyTab(pill, source: source)
             self.relayoutPills()
             pill.window.fadeIn()
         }
@@ -540,6 +659,12 @@ final class SpeechController {
     private func removePillOnMain(source: String) {
         guard let pill = pills.removeValue(forKey: source) else { return }
         pillOrder.removeAll { $0 == source }
+        if pill.paintedLit != nil {
+            Self.runKitten(pill.kitty, ["set-tab-color", "--match", "window_id:" + pill.kitty.window,
+                                        "active_bg=NONE", "active_fg=NONE",
+                                        "inactive_bg=NONE", "inactive_fg=NONE"])
+            Self.markKittyTab(pill.kitty, marker: nil)
+        }
         pill.window.fadeOut()
         relayoutPills()
     }
@@ -576,6 +701,7 @@ final class SpeechController {
             pill.lastSeen = Date()
             pill.size = pill.window.setContent(label: pill.label, lit: true,
                                                accent: self.color(for: source))
+            paintKittyTab(pill, source: source)
             relayoutPills()
             pill.window.fadeIn()
         }

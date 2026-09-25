@@ -61,11 +61,17 @@ final class SpeechController {
         var transcriptPath = ""
         var transcriptOffset: UInt64 = 0
         var transcriptTail = ""
+        /// Running Claude Code subagents (agent_id → last event), shown as a
+        /// count badge beside the pill instead of pills of their own.
+        var subagents: [String: Date] = [:]
+        let badge = SubagentBadgeWindow()
+        var badgeAttached = false
     }
     private var pillOrder: [String] = []        // oldest → newest, bottom → top
     private var pills: [String: Pill] = [:]
     private let pillIdleTimeout: TimeInterval = 600   // 10 min quiet → prune
     private let pillGap: CGFloat = 2            // near-flush to the visible body
+    private let badgeGap: CGFloat = 4           // pill ↔ its subagent badge
     /// Transparent padding inside the pet's window frame (the sprite doesn't
     /// fill the cell). Anchoring to the frame leaves a dead gap, so we pull in
     /// by this much to hug the actual artwork. ~8pt at the default 0.75 scale.
@@ -135,7 +141,7 @@ final class SpeechController {
     /// all optional.
     func handle(event: String, narration: String?, transcriptPath: String?,
                 source: String?, root: String?, agent: String?, app: String? = nil,
-                kitty: KittyTarget = KittyTarget()) {
+                subagent: String? = nil, kitty: KittyTarget = KittyTarget()) {
         let launchApp = (app ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let repo = (source ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let agentTag = (agent ?? "claude")
@@ -153,6 +159,18 @@ final class SpeechController {
         // Session closed: drop its pill and stop — there's nothing to narrate.
         if event == "SessionEnd" {
             if !src.isEmpty { removePill(source: src) }
+            return
+        }
+
+        // Subagent activity belongs to its parent session: count it on the
+        // parent's badge, and never let it create a pill (worktree subagents
+        // run in their own agent-<id> dir), flip readiness, or narrate.
+        let subagentID = Self.subagentID(subagent)
+        if event == "SubagentStart" || event == "SubagentStop" || !subagentID.isEmpty {
+            if config.showSwitchboard {
+                trackSubagent(id: subagentID, stopped: event == "SubagentStop",
+                              transcriptPath: transcriptPath ?? "", fallbackSource: src)
+            }
             return
         }
 
@@ -609,6 +627,7 @@ final class SpeechController {
                 pill = Pill()
                 pill.window.onClick = { [weak self] in self?.tapPill(source: source) }
                 pill.window.onClose = { [weak self] in self?.removePillOnMain(source: source) }
+                pill.badge.onClick = { [weak self] in self?.tapPill(source: source) }
                 pet.addChildWindow(pill.window, ordered: .above)
                 self.pills[source] = pill
                 self.pillOrder.append(source)
@@ -644,6 +663,19 @@ final class SpeechController {
     /// lit (it needs you, however long that takes). Runs on the main run loop.
     private func prunePills() {
         let now = Date()
+        // A subagent whose SubagentStop never arrived (interrupted turn, daemon
+        // restart) ages out on the same clock as a quiet session.
+        var badgesChanged = false
+        for source in pillOrder {
+            guard let pill = pills[source], !pill.subagents.isEmpty else { continue }
+            let before = pill.subagents.count
+            pill.subagents = pill.subagents.filter { now.timeIntervalSince($0.value) <= pillIdleTimeout }
+            if pill.subagents.count != before {
+                refreshBadge(pill)
+                badgesChanged = true
+            }
+        }
+        if badgesChanged { relayoutPills() }
         let stale = pillOrder.filter { source in
             guard let pill = pills[source] else { return false }
             return !pill.lit && now.timeIntervalSince(pill.lastSeen) > pillIdleTimeout
@@ -666,6 +698,7 @@ final class SpeechController {
             Self.markKittyTab(pill.kitty, marker: nil)
         }
         pill.window.fadeOut()
+        if pill.badgeAttached { pill.badge.fadeOut() }
         relayoutPills()
     }
 
@@ -685,6 +718,54 @@ final class SpeechController {
                 self.expire(source: source)
             }
         }
+    }
+
+    /// Claude Code agent ids are short hex-ish tokens. Anything else from the
+    /// socket is dropped rather than trusted as a dictionary key.
+    private static func subagentID(_ raw: String?) -> String {
+        let id = (raw ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard id.count <= 64,
+              id.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-" || $0 == "_") })
+        else { return "" }
+        return id
+    }
+
+    /// Record a subagent event on its parent session's pill. Claude passes the
+    /// parent's transcript_path on subagent events, which is the reliable link
+    /// — the subagent's cwd may be a worktree. Falls back to the cwd-derived
+    /// key only if that pill already exists.
+    private func trackSubagent(id: String, stopped: Bool, transcriptPath: String,
+                               fallbackSource: String) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            let parent = transcriptPath.isEmpty ? nil
+                : self.pillOrder.last { self.pills[$0]?.transcriptPath == transcriptPath }
+            guard let source = parent ?? (self.pills[fallbackSource] != nil ? fallbackSource : nil),
+                  let pill = self.pills[source] else { return }
+            if !id.isEmpty {
+                // Any in-subagent event (not just SubagentStart) marks it
+                // running, so the count self-heals after a missed start.
+                pill.subagents[id] = stopped ? nil : Date()
+            }
+            pill.lastSeen = Date()
+            self.refreshBadge(pill)
+            self.relayoutPills()
+        }
+    }
+
+    /// Show, update, or hide a pill's subagent badge to match its count.
+    private func refreshBadge(_ pill: Pill) {
+        let n = pill.subagents.count
+        guard n > 0 else {
+            if pill.badgeAttached { pill.badge.hide() }
+            return
+        }
+        pill.badge.count = n
+        if !pill.badgeAttached, let pet = pet {
+            pet.addChildWindow(pill.badge, ordered: .above)
+            pill.badgeAttached = true
+        }
+        pill.badge.show()
     }
 
     private func checkForAbortedTurns() {
@@ -741,7 +822,11 @@ final class SpeechController {
     private func relayoutPills() {
         guard let pet = pet else { return }
         let pf = pet.frame
-        let widest = pillOrder.compactMap { pills[$0]?.size.width }.max() ?? 0
+        let widest = pillOrder.compactMap { source -> CGFloat? in
+            guard let pill = pills[source] else { return nil }
+            return pill.size.width
+                + (pill.subagents.isEmpty ? 0 : badgeGap + SubagentBadgeWindow.size)
+        }.max() ?? 0
 
         // Anchor to the visible sprite edges, not the padded window frame.
         let rightEdge = pf.maxX - petArtInset
@@ -758,6 +843,10 @@ final class SpeechController {
             guard let pill = pills[source] else { continue }
             let x = onLeft ? leftEdge - pillGap - pill.size.width : rightEdge + pillGap
             pill.window.setFrameOrigin(NSPoint(x: x, y: y))
+            // Subagent badge on the pill's outward side, away from the pet.
+            let bx = onLeft ? x - badgeGap - SubagentBadgeWindow.size
+                            : x + pill.size.width + badgeGap
+            pill.badge.setFrameOrigin(NSPoint(x: bx, y: y))
             y += PillWindow.height + pillGap
         }
     }

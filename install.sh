@@ -88,6 +88,7 @@ if command -v jq >/dev/null 2>&1; then
     .hooks.PostToolUse      = [{ "hooks": [{ "type": "command", "command": $hook }] }] |
     .hooks.Notification     = [{ "hooks": [{ "type": "command", "command": $hook }] }] |
     .hooks.Stop             = [{ "hooks": [{ "type": "command", "command": $hook }] }] |
+    .hooks.SubagentStart    = [{ "hooks": [{ "type": "command", "command": $hook }] }] |
     .hooks.SubagentStop     = [{ "hooks": [{ "type": "command", "command": $hook }] }] |
     .hooks.PreCompact       = [{ "hooks": [{ "type": "command", "command": $hook }] }] |
     .hooks.SessionEnd       = [{ "hooks": [{ "type": "command", "command": $hook }] }] |

@@ -61,6 +61,10 @@ find_root() {
 EVENT="$(json_get hook_event_name)"
 TOOL="$(json_get tool_name)"
 TRANSCRIPT="$(json_get transcript_path)"
+# Set when the event fires inside a Claude Code subagent (its tool calls, and
+# SubagentStart/Stop). transcript_path is still the PARENT session's, so the
+# daemon folds the subagent into that session's pill instead of giving it one.
+SUBAGENT="$(json_get agent_id)"
 # Project the event came from. CWD is the agent's live working dir; ROOT is the
 # repo root we actually want to label by and open on click; SOURCE is its name.
 CWD="$(json_get cwd)"
@@ -129,6 +133,8 @@ case "$EVENT" in
   Notification|PermissionRequest)
     # Claude fires Notification; Codex fires PermissionRequest. Same meaning.
     ROW=6; MODE=sticky ;;                       # waiting — permission prompt
+  SubagentStart)
+    ROW=-1; MODE=release ;;                     # parent keeps its own state
   Stop|SubagentStop)
     # Use stop_hook_active to detect agent finishing without error.
     ROW=3; MODE=transient ;;                    # waving — done (success path)
@@ -186,7 +192,8 @@ APP_ESC="$(json_escape "$APP")"
 KITTY_WIN_ESC="$(json_escape "$KITTY_WIN")"
 KITTY_PID_ESC="$(json_escape "$KITTY_PID_")"
 KITTY_SOCK_ESC="$(json_escape "$KITTY_SOCK")"
-MSG="{\"event\":\"$EVENT\",\"agent\":\"$AGENT\",\"tool\":\"$TOOL\",\"row\":$ROW,\"mode\":\"$MODE\",\"ttl\":$TTL,\"text\":\"$TEXT\",\"transcript\":\"$TRANSCRIPT_ESC\",\"source\":\"$SOURCE_ESC\",\"root\":\"$ROOT_ESC\",\"app\":\"$APP_ESC\",\"kitty_window\":\"$KITTY_WIN_ESC\",\"kitty_pid\":\"$KITTY_PID_ESC\",\"kitty_sock\":\"$KITTY_SOCK_ESC\",\"ts\":$TS}"
+SUBAGENT_ESC="$(json_escape "$SUBAGENT")"
+MSG="{\"event\":\"$EVENT\",\"agent\":\"$AGENT\",\"tool\":\"$TOOL\",\"row\":$ROW,\"mode\":\"$MODE\",\"ttl\":$TTL,\"text\":\"$TEXT\",\"transcript\":\"$TRANSCRIPT_ESC\",\"source\":\"$SOURCE_ESC\",\"root\":\"$ROOT_ESC\",\"app\":\"$APP_ESC\",\"kitty_window\":\"$KITTY_WIN_ESC\",\"kitty_pid\":\"$KITTY_PID_ESC\",\"kitty_sock\":\"$KITTY_SOCK_ESC\",\"subagent\":\"$SUBAGENT_ESC\",\"ts\":$TS}"
 
 # Best-effort send. If the daemon isn't running, exit silently. Use a short
 # timeout via the OS rather than nc flags (varies between BSD nc and ncat).

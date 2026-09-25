@@ -164,6 +164,14 @@ final class PillView: NSView {
         needsDisplay = true
     }
 
+    /// Neutral capsule fill, before any accent wash.
+    static func baseFill(lit: Bool, dark: Bool) -> NSColor {
+        if lit {
+            return dark ? NSColor(white: 0.20, alpha: 0.97) : NSColor(white: 0.98, alpha: 0.97)
+        }
+        return dark ? NSColor(white: 0.13, alpha: 0.92) : NSColor(white: 0.91, alpha: 0.92)
+    }
+
     override func draw(_ dirtyRect: NSRect) {
         let dark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
         let r = bounds.insetBy(dx: 0.5, dy: 0.5)
@@ -172,13 +180,7 @@ final class PillView: NSView {
 
         // Capsule fill: bright neutral + accent wash when lit; flatter and
         // greyer when dim so the pill reads as switched-off.
-        let base: NSColor
-        if lit {
-            base = dark ? NSColor(white: 0.20, alpha: 0.97) : NSColor(white: 0.98, alpha: 0.97)
-        } else {
-            base = dark ? NSColor(white: 0.13, alpha: 0.92) : NSColor(white: 0.91, alpha: 0.92)
-        }
-        base.setFill(); path.fill()
+        Self.baseFill(lit: lit, dark: dark).setFill(); path.fill()
         if lit {
             accent.withAlphaComponent(dark ? 0.30 : 0.16).setFill()
             path.fill()
@@ -225,5 +227,109 @@ final class PillView: NSView {
             (lit ? accent.withAlphaComponent(0.9) : NSColor.tertiaryLabelColor).setStroke()
             x.stroke()
         }
+    }
+}
+
+/// A small circle beside a session's pill counting its running subagents.
+///
+/// Always drawn in the dim "running" pill treatment — subagents are work in
+/// flight, never something waiting on you — so it reads as belonging to the
+/// session without competing with a lit pill. Hidden (not detached) while the
+/// count is zero; clicking it focuses the parent session like the pill does.
+final class SubagentBadgeWindow: NSPanel {
+    static let size: CGFloat = PillWindow.height
+
+    private let view = SubagentBadgeView()
+
+    /// Invoked when the badge is clicked (focus the parent session).
+    var onClick: (() -> Void)?
+
+    init() {
+        super.init(contentRect: NSRect(x: 0, y: 0, width: Self.size, height: Self.size),
+                   styleMask: [.borderless, .nonactivatingPanel],
+                   backing: .buffered, defer: false)
+        isOpaque = false
+        backgroundColor = .clear
+        hasShadow = true
+        level = .floating
+        ignoresMouseEvents = true           // until shown
+        collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
+        hidesOnDeactivate = false
+        isReleasedWhenClosed = false
+        alphaValue = 0
+
+        view.frame = NSRect(x: 0, y: 0, width: Self.size, height: Self.size)
+        view.onClick = { [weak self] in self?.onClick?() }
+        contentView = view
+    }
+
+    override var canBecomeKey: Bool { false }
+    override var canBecomeMain: Bool { false }
+
+    var count: Int {
+        get { view.count }
+        set { view.count = newValue }
+    }
+
+    /// Fade in to the dim pill's resting alpha.
+    func show() {
+        ignoresMouseEvents = false
+        orderFrontRegardless()
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.15
+            animator().alphaValue = 0.55
+        }
+    }
+
+    /// Fade to invisible but stay attached, so the next subagent can reuse it.
+    func hide() {
+        ignoresMouseEvents = true
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.2
+            animator().alphaValue = 0
+        }
+    }
+
+    func fadeOut() {
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = 0.2
+            animator().alphaValue = 0
+        }, completionHandler: { [weak self] in
+            self?.orderOut(nil)
+        })
+    }
+}
+
+/// Circle with a centered count, styled like a dim PillView.
+final class SubagentBadgeView: NSView {
+    static let font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
+
+    var count = 0 { didSet { needsDisplay = true } }
+    var onClick: (() -> Void)?
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    override func mouseDown(with event: NSEvent) { onClick?() }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsDisplay = true
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let dark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        let circle = NSBezierPath(ovalIn: bounds.insetBy(dx: 0.5, dy: 0.5))
+        PillView.baseFill(lit: false, dark: dark).setFill()
+        circle.fill()
+        NSColor.separatorColor.withAlphaComponent(0.5).setStroke()
+        circle.lineWidth = 1
+        circle.stroke()
+
+        let text = count > 9 ? "9+" : String(count)
+        let attrs: [NSAttributedString.Key: Any] = [.font: Self.font,
+                                                    .foregroundColor: NSColor.tertiaryLabelColor]
+        let size = (text as NSString).size(withAttributes: attrs)
+        (text as NSString).draw(at: NSPoint(x: bounds.midX - size.width / 2,
+                                            y: bounds.midY - size.height / 2),
+                                withAttributes: attrs)
     }
 }

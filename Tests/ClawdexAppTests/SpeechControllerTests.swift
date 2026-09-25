@@ -205,4 +205,70 @@ final class SpeechControllerTests: XCTestCase {
 
         XCTAssertEqual(pill.alphaValue, 1.0, accuracy: 0.02)
     }
+
+    func testSubagentsCountOnParentBadgeWithoutOwnPill() throws {
+        let pet = PetWindow()
+        let speech = SpeechController(pet: pet,
+                                      config: ClawdexConfig(messageVisibility: .none))
+        let transcript = "/tmp/parent-session.jsonl"
+
+        speech.handle(event: "PreToolUse", narration: "Agent",
+                      transcriptPath: transcript, source: "app", root: "/tmp/app", agent: "claude")
+        // Worktree subagents run in their own agent-<id> dir but carry the
+        // parent's transcript path.
+        for id in ["a1", "a2"] {
+            speech.handle(event: "SubagentStart", narration: nil,
+                          transcriptPath: transcript, source: "agent-\(id)",
+                          root: "/tmp/agent-\(id)", agent: "claude", subagent: id)
+        }
+        speech.handle(event: "PreToolUse", narration: "Editing x.swift",
+                      transcriptPath: transcript, source: "agent-a1",
+                      root: "/tmp/agent-a1", agent: "claude", subagent: "a1")
+        RunLoop.main.run(until: Date().addingTimeInterval(0.4))
+
+        let pills = pet.childWindows?.compactMap { $0 as? PillWindow } ?? []
+        XCTAssertEqual(pills.count, 1)
+        let badge = try XCTUnwrap(pet.childWindows?.compactMap { $0 as? SubagentBadgeWindow }.first)
+        XCTAssertEqual(badge.count, 2)
+        XCTAssertEqual(badge.alphaValue, 0.55, accuracy: 0.02)
+
+        speech.handle(event: "SubagentStop", narration: nil,
+                      transcriptPath: transcript, source: "agent-a1",
+                      root: "/tmp/agent-a1", agent: "claude", subagent: "a1")
+        RunLoop.main.run(until: Date().addingTimeInterval(0.4))
+        XCTAssertEqual(badge.count, 1)
+
+        speech.handle(event: "SubagentStop", narration: nil,
+                      transcriptPath: transcript, source: "agent-a2",
+                      root: "/tmp/agent-a2", agent: "claude", subagent: "a2")
+        RunLoop.main.run(until: Date().addingTimeInterval(0.4))
+        XCTAssertEqual(badge.alphaValue, 0, accuracy: 0.02)
+    }
+
+    func testSubagentEventsDoNotChangeParentReadiness() throws {
+        let pet = PetWindow()
+        let speech = SpeechController(pet: pet,
+                                      config: ClawdexConfig(messageVisibility: .none))
+        let transcript = "/tmp/parent-bg.jsonl"
+
+        speech.handle(event: "SubagentStart", narration: nil,
+                      transcriptPath: transcript, source: "app", root: "/tmp/app",
+                      agent: "claude", subagent: "bg1")
+        // No parent pill yet: nothing to attach to, and no pill of its own.
+        RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+        XCTAssertEqual(pet.childWindows?.count ?? 0, 0)
+
+        speech.handle(event: "Stop", narration: nil,
+                      transcriptPath: transcript, source: "app", root: "/tmp/app", agent: "claude")
+        // A background subagent keeps working after the parent's turn ends.
+        speech.handle(event: "PreToolUse", narration: "Bash",
+                      transcriptPath: transcript, source: "app", root: "/tmp/app",
+                      agent: "claude", subagent: "bg1")
+        RunLoop.main.run(until: Date().addingTimeInterval(0.4))
+
+        let pill = try XCTUnwrap(pet.childWindows?.compactMap { $0 as? PillWindow }.first)
+        XCTAssertEqual(pill.alphaValue, 1.0, accuracy: 0.02)
+        let badge = try XCTUnwrap(pet.childWindows?.compactMap { $0 as? SubagentBadgeWindow }.first)
+        XCTAssertEqual(badge.count, 1)
+    }
 }

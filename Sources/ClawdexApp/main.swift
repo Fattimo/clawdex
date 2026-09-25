@@ -112,6 +112,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             speech.handle(event: s.event ?? "", narration: s.text,
                           transcriptPath: s.transcript, source: s.source,
                           root: s.root, agent: s.agent, app: s.app,
+                          subagent: s.subagent,
                           kitty: SpeechController.KittyTarget(
                               window: s.kitty_window ?? "", pid: s.kitty_pid ?? "",
                               sock: s.kitty_sock ?? ""))
@@ -132,6 +133,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let kitty_window: String?   // KITTY_WINDOW_ID, when launched in kitty
         let kitty_pid: String?
         let kitty_sock: String?     // KITTY_LISTEN_ON, if kitty set it
+        let subagent: String?       // Claude Code agent_id, inside a subagent
     }
 
     private func saveConfig() {

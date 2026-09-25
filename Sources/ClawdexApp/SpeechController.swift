@@ -57,19 +57,40 @@ final class SpeechController {
         var app = ""        // launching app's bundle id, for click-to-open
         var kitty = KittyTarget()   // kitty window to focus, when launched in kitty
         var paintedLit: Bool?       // last readiness painted onto the kitty tab
+        var agent = ""
+        /// Last hook event or transcript growth — the session's activity clock.
         var lastSeen = Date()
         var transcriptPath = ""
         var transcriptOffset: UInt64 = 0
-        var transcriptTail = ""
+        var transcript = TranscriptScan()
+        var compacting = false
         /// Running Claude Code subagents (agent_id → last event), shown as a
         /// count badge beside the pill instead of pills of their own.
         var subagents: [String: Date] = [:]
         let badge = SubagentBadgeWindow()
         var badgeAttached = false
+        var badgeContent: SubagentBadgeView.Content?
+    }
+
+    /// What the transcript poller knows about a session, accumulated from the
+    /// lines appended since the pill started watching that transcript.
+    struct TranscriptScan {
+        var partialLine = ""
+        var openTools: Set<String> = []          // tool_use ids with no tool_result yet
+        var backgroundJobs: [String: Date] = [:] // backgroundTaskId → launch
+        var sawAbort = false
     }
     private var pillOrder: [String] = []        // oldest → newest, bottom → top
     private var pills: [String: Pill] = [:]
     private let pillIdleTimeout: TimeInterval = 600   // 10 min quiet → prune
+    /// A dim Claude pill with nothing in flight and no activity for this long
+    /// shows "?": the turn most likely ended without a hook (Esc before the
+    /// first reply rewinds the prompt and leaves no transcript marker). 99% of
+    /// model replies land within ~45s of the prompt or last tool result.
+    var stallTimeout: TimeInterval = 60
+    /// Background jobs whose completion notification never arrives (session
+    /// killed, daemon restart) stop showing "…" after this long.
+    private let backgroundJobTimeout: TimeInterval = 7200
     private let pillGap: CGFloat = 2            // near-flush to the visible body
     private let badgeGap: CGFloat = 4           // pill ↔ its subagent badge
     /// Transparent padding inside the pet's window frame (the sprite doesn't
@@ -119,11 +140,14 @@ final class SpeechController {
         Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
             self?.prunePills()
         }
-        // Codex does not currently emit a hook for a user-aborted turn. Its
-        // transcript does gain a small abort marker, so watch appended
-        // transcript bytes as the narrow fallback for returning to ready.
+        // Neither Claude nor Codex emits a hook for a user-aborted turn (Claude
+        // skips Stop on Esc). Both transcripts do gain a small abort marker, so
+        // watch appended transcript bytes as the narrow fallback for returning
+        // to ready.
+        // The same poll tracks in-flight tools and background jobs for the
+        // pill's badge ("?" / "…").
         Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
-            self?.checkForAbortedTurns()
+            self?.scanTranscripts()
         }
     }
 
@@ -183,9 +207,11 @@ final class SpeechController {
         // there's nothing new to say.
         if config.showSwitchboard, !src.isEmpty {
             let lit = Self.litState(for: event, agent: agentTag)
-            updatePill(source: src, label: label, root: root ?? "",
+            updatePill(source: src, label: label, agent: agentTag, root: root ?? "",
                        threadID: threadID, transcriptPath: transcriptPath ?? "",
-                       app: launchApp, kitty: kitty, lit: lit)
+                       app: launchApp, kitty: kitty, lit: lit,
+                       compacting: event == "PreCompact",
+                       turnEnded: event == "Stop" || event == "StopFailure")
         }
 
         // A user prompt (or session start) begins a NEW turn: there's no new
@@ -582,10 +608,13 @@ final class SpeechController {
     ///
     /// - Claude tells us directly when it's waiting on you. A fresh/cleared
     ///   session (SessionStart) is parked on your first prompt, Stop ends a turn,
-    ///   and Notification is "waiting for you" — all lit. Working events dim it.
+    ///   and Notification is "waiting for you" — all lit. StopFailure is a turn
+    ///   that died on an API error instead of Stop; it's just as idle, so it
+    ///   lights too. Working events dim it. A user interrupt (Esc) fires no
+    ///   hook at all — the transcript marker covers it, see scanTranscripts.
     /// - Codex has no waiting-on-you event we can trust: its PermissionRequest
     ///   fires mid-turn while it keeps working, and it emits no Stop on a user
-    ///   abort (the transcript abort marker covers that, see checkForAbortedTurns).
+    ///   abort (the transcript abort marker covers that, see scanTranscripts).
     ///   So only Stop lights it; everything ambiguous is left as-is.
     static func litState(for event: String, agent: String) -> Bool? {
         if agent == "codex" {
@@ -605,7 +634,7 @@ final class SpeechController {
         }
         // Claude (and any unknown agent): the original waiting-on-you model.
         switch event {
-        case "SessionStart", "Stop", "Notification":
+        case "SessionStart", "Stop", "StopFailure", "Notification":
             return true
         case "UserPromptSubmit", "PreToolUse", "PostToolUse", "PreCompact":
             return false
@@ -615,9 +644,10 @@ final class SpeechController {
     }
 
     /// Create-or-update a session's pill and (optionally) flip its lit state.
-    private func updatePill(source: String, label: String, root: String,
+    private func updatePill(source: String, label: String, agent: String, root: String,
                             threadID: String, transcriptPath: String, app: String,
-                            kitty: KittyTarget, lit: Bool?) {
+                            kitty: KittyTarget, lit: Bool?, compacting: Bool,
+                            turnEnded: Bool = false) {
         DispatchQueue.main.async { [weak self] in
             guard let self = self, let pet = self.pet else { return }
             let pill: Pill
@@ -633,20 +663,30 @@ final class SpeechController {
                 self.pillOrder.append(source)
             }
             pill.label = label
+            pill.agent = agent
             if !root.isEmpty { pill.root = root }
             if !threadID.isEmpty { pill.threadID = threadID }
             if !app.isEmpty { pill.app = app }
             if !kitty.isEmpty { pill.kitty = kitty }
-            if !transcriptPath.isEmpty {
+            // Start watching a transcript from its current end; after that the
+            // poller reads it continuously, so lines written just before this
+            // event (e.g. the tool_use a PreToolUse announces) aren't skipped.
+            if !transcriptPath.isEmpty, transcriptPath != pill.transcriptPath {
                 pill.transcriptPath = transcriptPath
                 pill.transcriptOffset = Self.transcriptSize(path: transcriptPath)
-                pill.transcriptTail = ""
+                pill.transcript = TranscriptScan()
             }
             pill.lastSeen = Date()
+            pill.compacting = compacting
+            // Nothing is in flight once a turn ends; drop any tool_use whose
+            // result line we missed so it can't suppress "?" next turn.
+            if turnEnded { pill.transcript.openTools.removeAll() }
             if let lit = lit { pill.lit = lit }
             pill.size = pill.window.setContent(label: label, lit: pill.lit,
                                                accent: self.color(for: source))
+            pill.badge.accent = self.color(for: source)
             self.paintKittyTab(pill, source: source)
+            self.refreshBadge(pill)
             self.relayoutPills()
             pill.window.fadeIn()
         }
@@ -753,39 +793,123 @@ final class SpeechController {
         }
     }
 
-    /// Show, update, or hide a pill's subagent badge to match its count.
-    private func refreshBadge(_ pill: Pill) {
-        let n = pill.subagents.count
-        guard n > 0 else {
+    /// The badge a pill should show, highest priority first: running subagents
+    /// (the session is plainly busy), then "?" for a turn that has gone silent
+    /// with nothing in flight, then "…" for background jobs still running.
+    private func badgeContent(for pill: Pill, now: Date = Date()) -> SubagentBadgeView.Content? {
+        if !pill.subagents.isEmpty { return .count(pill.subagents.count) }
+        if isStalled(pill, now: now) { return .stalled }
+        if !pill.transcript.backgroundJobs.isEmpty { return .background }
+        return nil
+    }
+
+    /// Only Claude transcripts record tool_use/tool_result pairs we can match,
+    /// so Codex pills never stall.
+    private func isStalled(_ pill: Pill, now: Date) -> Bool {
+        (pill.agent == "claude" || pill.agent.isEmpty) && !pill.lit
+            && !pill.transcriptPath.isEmpty && pill.transcript.openTools.isEmpty
+            && !pill.compacting && now.timeIntervalSince(pill.lastSeen) > stallTimeout
+    }
+
+    /// Show, update, or hide a pill's badge to match its state. Returns whether
+    /// the badge appeared or disappeared (the pill stack's width may change).
+    @discardableResult
+    private func refreshBadge(_ pill: Pill) -> Bool {
+        let content = badgeContent(for: pill)
+        let toggled = (content == nil) != (pill.badgeContent == nil)
+        guard content != pill.badgeContent else { return false }
+        pill.badgeContent = content
+        guard let content = content else {
             if pill.badgeAttached { pill.badge.hide() }
-            return
+            return toggled
         }
-        pill.badge.count = n
+        pill.badge.content = content
         if !pill.badgeAttached, let pet = pet {
             pet.addChildWindow(pill.badge, ordered: .above)
             pill.badgeAttached = true
         }
-        pill.badge.show()
+        pill.badge.show(bright: content == .stalled)
+        return toggled
     }
 
-    private func checkForAbortedTurns() {
+    private func scanTranscripts() {
+        let now = Date()
+        var layoutChanged = false
         for source in pillOrder {
-            guard let pill = pills[source], !pill.lit, !pill.transcriptPath.isEmpty else { continue }
-            let update = Self.abortMarkerUpdate(path: pill.transcriptPath,
-                                                offset: pill.transcriptOffset,
-                                                tail: pill.transcriptTail)
+            guard let pill = pills[source], !pill.transcriptPath.isEmpty else { continue }
+            let update = Self.readAppended(path: pill.transcriptPath, offset: pill.transcriptOffset)
             pill.transcriptOffset = update.offset
-            pill.transcriptTail = update.tail
-            guard update.found else { continue }
+            if let chunk = update.chunk {
+                pill.lastSeen = now
+                pill.transcript.sawAbort = false
+                Self.scan(chunk, into: &pill.transcript)
+            }
+            pill.transcript.backgroundJobs = pill.transcript.backgroundJobs
+                .filter { now.timeIntervalSince($0.value) <= backgroundJobTimeout }
 
-            pill.lit = true
-            pill.lastSeen = Date()
-            pill.size = pill.window.setContent(label: pill.label, lit: true,
-                                               accent: self.color(for: source))
-            paintKittyTab(pill, source: source)
-            relayoutPills()
-            pill.window.fadeIn()
+            if pill.transcript.sawAbort, !pill.lit {
+                pill.lit = true
+                pill.size = pill.window.setContent(label: pill.label, lit: true,
+                                                   accent: self.color(for: source))
+                paintKittyTab(pill, source: source)
+                pill.window.fadeIn()
+                layoutChanged = true
+            }
+            if refreshBadge(pill) { layoutChanged = true }
         }
+        if layoutChanged { relayoutPills() }
+    }
+
+    /// Codex writes a `<turn_aborted>` user message; Claude writes a user text
+    /// block "[Request interrupted by user]" (or "… for tool use]"). Claude's is
+    /// matched with its raw JSON quotes so a tool result that merely quotes the
+    /// marker (escaped as \"text\":\"…) can't light a pill mid-turn. The id
+    /// patterns below rely on the same raw-quote rule.
+    private static let abortMarkers = ["<turn_aborted>", #""text":"[Request interrupted by user"#]
+    private static let toolUseRegex = try! NSRegularExpression(
+        pattern: #""type":"tool_use","id":"([A-Za-z0-9_]{1,64})""#)
+    private static let toolResultRegex = try! NSRegularExpression(
+        pattern: #""tool_use_id":"([A-Za-z0-9_]{1,64})""#)
+    private static let backgroundLaunchRegex = try! NSRegularExpression(
+        pattern: #""backgroundTaskId":"([A-Za-z0-9_]{1,64})""#)
+    /// Completion notices arrive as queued `<task-notification>` messages.
+    private static let queuedNotice = #""type":"queue-operation","operation":"enqueue""#
+    private static let taskDoneRegex = try! NSRegularExpression(
+        pattern: #"<task-id>([A-Za-z0-9_]{1,64})</task-id>"#)
+    /// Bounds on untrusted transcript input: a partial line longer than this is
+    /// dropped rather than buffered, and the id sets stop growing past a cap.
+    private static let maxPartialLine = 4 << 20
+    private static let maxTrackedIDs = 256
+
+    /// Fold appended transcript text into `state`, one complete line at a time.
+    static func scan(_ chunk: String, into state: inout TranscriptScan) {
+        var lines = (state.partialLine + chunk).components(separatedBy: "\n")
+        let partial = lines.removeLast()
+        state.partialLine = partial.utf8.count > maxPartialLine ? "" : partial
+        for line in lines where !line.isEmpty {
+            if abortMarkers.contains(where: { line.contains($0) }) {
+                state.sawAbort = true
+                state.openTools.removeAll()
+            }
+            for id in matches(toolUseRegex, in: line) where state.openTools.count < maxTrackedIDs {
+                state.openTools.insert(id)
+            }
+            for id in matches(toolResultRegex, in: line) { state.openTools.remove(id) }
+            for id in matches(backgroundLaunchRegex, in: line)
+            where state.backgroundJobs.count < maxTrackedIDs {
+                state.backgroundJobs[id] = Date()
+            }
+            if line.contains(queuedNotice) {
+                for id in matches(taskDoneRegex, in: line) { state.backgroundJobs[id] = nil }
+            }
+        }
+    }
+
+    private static func matches(_ regex: NSRegularExpression, in line: String) -> [String] {
+        guard line.contains("\"") else { return [] }
+        let ns = line as NSString
+        return regex.matches(in: line, range: NSRange(location: 0, length: ns.length))
+            .map { ns.substring(with: $0.range(at: 1)) }
     }
 
     private static func transcriptSize(path: String) -> UInt64 {
@@ -794,25 +918,16 @@ final class SpeechController {
         return (try? fh.seekToEnd()) ?? 0
     }
 
-    private static func abortMarkerUpdate(path: String, offset: UInt64,
-                                          tail: String) -> (found: Bool, offset: UInt64, tail: String) {
-        guard let fh = FileHandle(forReadingAtPath: path) else {
-            return (false, offset, tail)
-        }
+    /// Bytes appended to a transcript since `offset`, and the new offset. A
+    /// file that shrank (rewritten) restarts from its new end.
+    private static func readAppended(path: String, offset: UInt64) -> (chunk: String?, offset: UInt64) {
+        guard let fh = FileHandle(forReadingAtPath: path) else { return (nil, offset) }
         defer { try? fh.close() }
-
         let size = (try? fh.seekToEnd()) ?? offset
-        guard size > offset else {
-            return size < offset ? (false, size, "") : (false, size, tail)
-        }
+        guard size > offset else { return (nil, size) }
         try? fh.seek(toOffset: offset)
-        guard let data = try? fh.readToEnd(), !data.isEmpty else {
-            return (false, size, tail)
-        }
-
-        let chunk = String(decoding: data, as: UTF8.self)
-        let scan = tail + chunk
-        return (scan.contains("<turn_aborted>"), size, String(scan.suffix(128)))
+        guard let data = try? fh.readToEnd(), !data.isEmpty else { return (nil, size) }
+        return (String(decoding: data, as: UTF8.self), offset + UInt64(data.count))
     }
 
     /// Stack the pills vertically beside the pet, bottom-aligned with the pet's
@@ -825,7 +940,7 @@ final class SpeechController {
         let widest = pillOrder.compactMap { source -> CGFloat? in
             guard let pill = pills[source] else { return nil }
             return pill.size.width
-                + (pill.subagents.isEmpty ? 0 : badgeGap + SubagentBadgeWindow.size)
+                + (pill.badgeContent == nil ? 0 : badgeGap + SubagentBadgeWindow.size)
         }.max() ?? 0
 
         // Anchor to the visible sprite edges, not the padded window frame.

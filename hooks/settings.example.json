@@ -8,6 +8,7 @@
     "PostToolUse":      [{ "hooks": [{ "type": "command", "command": "HOOKS_DIR/clawdex-hook" }] }],
     "Notification":     [{ "hooks": [{ "type": "command", "command": "HOOKS_DIR/clawdex-hook" }] }],
     "Stop":             [{ "hooks": [{ "type": "command", "command": "HOOKS_DIR/clawdex-hook" }] }],
+    "StopFailure":      [{ "hooks": [{ "type": "command", "command": "HOOKS_DIR/clawdex-hook" }] }],
     "SubagentStart":    [{ "hooks": [{ "type": "command", "command": "HOOKS_DIR/clawdex-hook" }] }],
     "SubagentStop":     [{ "hooks": [{ "type": "command", "command": "HOOKS_DIR/clawdex-hook" }] }],
     "PreCompact":       [{ "hooks": [{ "type": "command", "command": "HOOKS_DIR/clawdex-hook" }] }],

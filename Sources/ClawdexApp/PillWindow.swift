@@ -230,12 +230,14 @@ final class PillView: NSView {
     }
 }
 
-/// A small circle beside a session's pill counting its running subagents.
+/// A small circle beside a session's pill: its running subagent count, "?"
+/// when the turn has gone silent with nothing in flight (it may be waiting on
+/// you), or "…" while background jobs are still running.
 ///
-/// Always drawn in the dim "running" pill treatment — subagents are work in
-/// flight, never something waiting on you — so it reads as belonging to the
-/// session without competing with a lit pill. Hidden (not detached) while the
-/// count is zero; clicking it focuses the parent session like the pill does.
+/// Subagents and background jobs are work in flight, never something waiting
+/// on you, so they're drawn in the dim "running" pill treatment. "?" is drawn
+/// bright to catch your eye. Hidden (not detached) while there's nothing to
+/// show; clicking it focuses the parent session like the pill does.
 final class SubagentBadgeWindow: NSPanel {
     static let size: CGFloat = PillWindow.height
 
@@ -266,18 +268,24 @@ final class SubagentBadgeWindow: NSPanel {
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
 
-    var count: Int {
-        get { view.count }
-        set { view.count = newValue }
+    var content: SubagentBadgeView.Content {
+        get { view.content }
+        set { view.content = newValue }
     }
 
-    /// Fade in to the dim pill's resting alpha.
-    func show() {
+    /// The parent pill's accent, used to draw "?" like a lit pill.
+    var accent: NSColor {
+        get { view.accent }
+        set { view.accent = newValue }
+    }
+
+    /// Fade in to the dim pill's resting alpha, or full alpha when `bright`.
+    func show(bright: Bool = false) {
         ignoresMouseEvents = false
         orderFrontRegardless()
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = 0.15
-            animator().alphaValue = 0.55
+            animator().alphaValue = bright ? 1.0 : 0.55
         }
     }
 
@@ -300,11 +308,19 @@ final class SubagentBadgeWindow: NSPanel {
     }
 }
 
-/// Circle with a centered count, styled like a dim PillView.
+/// Circle with a centered glyph, styled like a dim PillView — or, for "?",
+/// like a lit one in the session's accent color.
 final class SubagentBadgeView: NSView {
     static let font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
 
-    var count = 0 { didSet { needsDisplay = true } }
+    enum Content: Equatable {
+        case count(Int)   // running subagents
+        case stalled      // "?" — silent turn, nothing in flight
+        case background   // "…" — background jobs still running
+    }
+
+    var content = Content.count(0) { didSet { needsDisplay = true } }
+    var accent: NSColor = .controlAccentColor { didSet { needsDisplay = true } }
     var onClick: (() -> Void)?
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
@@ -318,15 +334,28 @@ final class SubagentBadgeView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         let dark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
         let circle = NSBezierPath(ovalIn: bounds.insetBy(dx: 0.5, dy: 0.5))
-        PillView.baseFill(lit: false, dark: dark).setFill()
+        let bright = content == .stalled
+        PillView.baseFill(lit: bright, dark: dark).setFill()
         circle.fill()
-        NSColor.separatorColor.withAlphaComponent(0.5).setStroke()
-        circle.lineWidth = 1
+        // Same accent wash + border as a lit PillView.
+        if bright {
+            accent.withAlphaComponent(dark ? 0.30 : 0.16).setFill()
+            circle.fill()
+        }
+        (bright ? accent.withAlphaComponent(0.9) : NSColor.separatorColor.withAlphaComponent(0.5)).setStroke()
+        circle.lineWidth = bright ? 1.5 : 1
         circle.stroke()
 
-        let text = count > 9 ? "9+" : String(count)
-        let attrs: [NSAttributedString.Key: Any] = [.font: Self.font,
-                                                    .foregroundColor: NSColor.tertiaryLabelColor]
+        let text: String
+        switch content {
+        case .count(let n): text = n > 9 ? "9+" : String(n)
+        case .stalled:      text = "?"
+        case .background:   text = "…"
+        }
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: Self.font,
+            .foregroundColor: bright ? accent : NSColor.tertiaryLabelColor,
+        ]
         let size = (text as NSString).size(withAttributes: attrs)
         (text as NSString).draw(at: NSPoint(x: bounds.midX - size.width / 2,
                                             y: bounds.midY - size.height / 2),

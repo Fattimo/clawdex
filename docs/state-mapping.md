@@ -31,6 +31,7 @@ The fixed row layout (from
 | `PostToolUse`           | -1  | release   | Claude clears sticky lock; Codex keeps its current work row until the next event |
 | `Notification`          |  6  | sticky    | permission prompt — pet visibly waits                   |
 | `Stop`, `SubagentStop`  |  3  | transient | wave goodbye / done                                     |
+| `StopFailure`           |  5  | transient | turn ended on an API error — sad pet, pill lights       |
 | `PreCompact`            |  8  | sticky    | reviewing/condensing — fits "review"                    |
 
 ## Modes
@@ -57,3 +58,20 @@ The fixed row layout (from
 - **No automatic `running-right` / `running-left` swap.** The daemon may
   alternate between rows 1 and 2 as a decorative idle behaviour after long
   inactivity. The hook layer never targets them directly.
+
+## Switchboard badge
+
+A small circle beside a session's pill, one glyph at a time, highest priority
+first:
+
+| Glyph | Brightness | When                                                                 |
+| ----- | ---------- | -------------------------------------------------------------------- |
+| count | dim        | Claude Code subagents running (SubagentStart/Stop)                   |
+| `?`   | bright     | pill dim, no tool_use awaiting its tool_result, not compacting, and no hook event or transcript growth for 60s |
+| `…`   | dim        | background jobs (`backgroundTaskId`) with no `<task-notification>` yet |
+
+`?` exists because Esc before Claude's first reply rewinds the prompt into the
+input box and leaves no hook and no transcript marker. It only suggests the
+turn ended, so the pill itself stays dim. 99% of model replies arrive within
+~45s of the prompt or last tool result, so 60s rarely misfires. Claude only:
+Codex transcripts don't record tool calls in a form we match.

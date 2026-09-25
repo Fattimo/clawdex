@@ -138,6 +138,10 @@ case "$EVENT" in
   Stop|SubagentStop)
     # Use stop_hook_active to detect agent finishing without error.
     ROW=3; MODE=transient ;;                    # waving — done (success path)
+  StopFailure)
+    # Claude ends the turn on an API error (rate limit, overload, auth) and
+    # fires this INSTEAD of Stop. The agent is idle and waiting on you.
+    ROW=5; MODE=transient ;;                    # failed — turn died
   SessionEnd)
     ROW=0; MODE=release ;;                       # session closed — drop its pill
   PreCompact|PostCompact)
@@ -176,6 +180,8 @@ case "$EVENT" in
     esac ;;
   Notification|PermissionRequest)
     NARRATION="waiting for you" ;;
+  StopFailure)
+    NARRATION="stopped on an error" ;;
   PreCompact|PostCompact)
     NARRATION="compacting…" ;;
   # SessionStart / Stop / SubagentStop: leave empty so the daemon shows the

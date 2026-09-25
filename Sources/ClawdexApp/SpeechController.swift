@@ -15,6 +15,15 @@ import Foundation
 ///      ("Editing main.swift") shown when there's no fresh prose, e.g.
 ///      mid-tool-call.
 final class SpeechController {
+    /// The kitty window a session runs in (from the hook's KITTY_* env), so a
+    /// click can focus that exact tab over kitty's remote-control socket.
+    struct KittyTarget {
+        var window = ""   // KITTY_WINDOW_ID
+        var pid = ""      // KITTY_PID — derives the socket when `sock` is unset
+        var sock = ""     // KITTY_LISTEN_ON, e.g. unix:/var/folders/…/T/kitty-123
+        var isEmpty: Bool { window.isEmpty }
+    }
+
     private weak var pet: PetWindow?
     private var config: ClawdexConfig
 
@@ -25,6 +34,7 @@ final class SpeechController {
         var root: String = ""
         var threadID: String = ""   // Codex conversation id, for the deep link
         var app: String = ""        // launching app's bundle id, for click-to-open
+        var kitty = KittyTarget()   // kitty window to focus, when launched in kitty
     }
 
     /// Ordered oldest → newest. Newest stacks highest.
@@ -45,6 +55,7 @@ final class SpeechController {
         var root = ""
         var threadID = ""   // Codex conversation id, for the deep link
         var app = ""        // launching app's bundle id, for click-to-open
+        var kitty = KittyTarget()   // kitty window to focus, when launched in kitty
         var lastSeen = Date()
         var transcriptPath = ""
         var transcriptOffset: UInt64 = 0
@@ -122,7 +133,8 @@ final class SpeechController {
     /// Feed one socket event. `narration`, `transcriptPath`, and `source` are
     /// all optional.
     func handle(event: String, narration: String?, transcriptPath: String?,
-                source: String?, root: String?, agent: String?, app: String?) {
+                source: String?, root: String?, agent: String?, app: String?,
+                kitty: KittyTarget = KittyTarget()) {
         let launchApp = (app ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let repo = (source ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let agentTag = (agent ?? "claude")
@@ -154,7 +166,7 @@ final class SpeechController {
             let lit = Self.litState(for: event, agent: agentTag)
             updatePill(source: src, label: label, root: root ?? "",
                        threadID: threadID, transcriptPath: transcriptPath ?? "",
-                       app: launchApp, lit: lit)
+                       app: launchApp, kitty: kitty, lit: lit)
         }
 
         // A user prompt (or session start) begins a NEW turn: there's no new
@@ -191,7 +203,7 @@ final class SpeechController {
         let isFinal = event == "Stop"
         guard shouldShowMessage(isFinal: isFinal) else { return }
         show(source: src, label: label, root: root ?? "", threadID: threadID,
-             app: launchApp, text: text, isFinal: isFinal)
+             app: launchApp, kitty: kitty, text: text, isFinal: isFinal)
     }
 
     private func shouldShowMessage(isFinal: Bool) -> Bool {
@@ -206,7 +218,7 @@ final class SpeechController {
     }
 
     private func show(source: String, label: String, root: String, threadID: String,
-                      app: String, text raw: String, isFinal: Bool) {
+                      app: String, kitty: KittyTarget, text raw: String, isFinal: Bool) {
         let text = Self.clean(raw)
         guard !text.isEmpty else { return }
         DispatchQueue.main.async { [weak self] in
@@ -228,6 +240,7 @@ final class SpeechController {
             if !root.isEmpty { bubble.root = root }
             if !threadID.isEmpty { bubble.threadID = threadID }
             if !app.isEmpty { bubble.app = app }
+            if !kitty.isEmpty { bubble.kitty = kitty }
 
             bubble.size = bubble.window.setContent(source: label, message: text,
                                                    isFinal: isFinal, accent: self.color(for: source))
@@ -300,6 +313,20 @@ final class SpeechController {
         let cfg = NSWorkspace.OpenConfiguration()
         cfg.activates = true   // bring the app (and that workspace) to the front
 
+        // kitty: focus the session's own tab over the remote-control socket.
+        // Handing kitty a folder would spawn a new window, so never do that —
+        // if the tab can't be reached, just bring kitty to the front.
+        if launchApp == Self.kittyBundleID {
+            let kitty = pills[source]?.kitty ?? bubbles[source]?.kitty ?? KittyTarget()
+            Self.focusKitty(kitty, appURL: appURL)
+            ws.openApplication(at: appURL, configuration: cfg) { _, err in
+                if let err = err {
+                    NSLog("clawdex: failed to focus kitty: \(err.localizedDescription)")
+                }
+            }
+            return
+        }
+
         // Claude Desktop hosts its sessions in-app; handing it a folder drops you
         // in cowork rather than your session, so just bring the app to the front.
         // Editors (Zed, VS Code, …) do the right thing with a folder — open/focus
@@ -326,6 +353,57 @@ final class SpeechController {
         ws.open([folder], withApplicationAt: appURL, configuration: cfg) { _, err in
             if let err = err {
                 NSLog("clawdex: failed to open \(root) in \(name): \(err.localizedDescription)")
+            }
+        }
+    }
+
+    private static let kittyBundleID = "net.kovidgoyal.kitty"
+
+    /// Resolve the kitty instance's remote-control socket. Prefers the hook's
+    /// KITTY_LISTEN_ON; otherwise assumes `listen_on unix:${TMPDIR}/kitty`, which
+    /// kitty suffixes with its PID. Only per-user temp-dir sockets are accepted,
+    /// so hook input can't point us at an arbitrary socket.
+    private static func kittySocket(_ k: KittyTarget) -> String? {
+        let tmp = URL(fileURLWithPath: NSTemporaryDirectory()).standardizedFileURL.path
+        var path: String
+        if k.sock.hasPrefix("unix:") {
+            path = String(k.sock.dropFirst("unix:".count))
+        } else if !k.pid.isEmpty, k.pid.allSatisfy(\.isASCII), k.pid.allSatisfy(\.isNumber) {
+            path = tmp + "/kitty-" + k.pid
+        } else {
+            return nil
+        }
+        path = URL(fileURLWithPath: path).standardizedFileURL.path
+        guard path.hasPrefix(tmp + "/"),
+              let type = try? FileManager.default.attributesOfItem(atPath: path)[.type] as? FileAttributeType,
+              type == .typeSocket else { return nil }
+        return "unix:" + path
+    }
+
+    /// Ask kitty to focus the session's window (and so its tab). Best-effort:
+    /// runs kitten directly (argv, no shell) off the main thread.
+    private static func focusKitty(_ k: KittyTarget, appURL: URL) {
+        guard !k.window.isEmpty, k.window.allSatisfy(\.isASCII), k.window.allSatisfy(\.isNumber),
+              let sock = kittySocket(k) else {
+            NSLog("clawdex: no kitty socket for window \(k.window); set listen_on in kitty.conf")
+            return
+        }
+        let kitten = appURL.appendingPathComponent("Contents/MacOS/kitten")
+        DispatchQueue.global(qos: .userInitiated).async {
+            let p = Process()
+            p.executableURL = kitten
+            p.arguments = ["@", "--to", sock, "focus-window", "--match", "id:" + k.window]
+            p.standardInput = FileHandle.nullDevice
+            p.standardOutput = FileHandle.nullDevice
+            p.standardError = FileHandle.nullDevice
+            do {
+                try p.run()
+                p.waitUntilExit()
+                if p.terminationStatus != 0 {
+                    NSLog("clawdex: kitten focus-window id:\(k.window) exited \(p.terminationStatus)")
+                }
+            } catch {
+                NSLog("clawdex: failed to run kitten: \(error.localizedDescription)")
             }
         }
     }
@@ -403,7 +481,7 @@ final class SpeechController {
     /// Create-or-update a session's pill and (optionally) flip its lit state.
     private func updatePill(source: String, label: String, root: String,
                             threadID: String, transcriptPath: String, app: String,
-                            lit: Bool?) {
+                            kitty: KittyTarget, lit: Bool?) {
         DispatchQueue.main.async { [weak self] in
             guard let self = self, let pet = self.pet else { return }
             let pill: Pill
@@ -421,6 +499,7 @@ final class SpeechController {
             if !root.isEmpty { pill.root = root }
             if !threadID.isEmpty { pill.threadID = threadID }
             if !app.isEmpty { pill.app = app }
+            if !kitty.isEmpty { pill.kitty = kitty }
             if !transcriptPath.isEmpty {
                 pill.transcriptPath = transcriptPath
                 pill.transcriptOffset = Self.transcriptSize(path: transcriptPath)

@@ -111,7 +111,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
            let s = try? JSONDecoder().decode(SpeechLine.self, from: data) {
             speech.handle(event: s.event ?? "", narration: s.text,
                           transcriptPath: s.transcript, source: s.source,
-                          root: s.root, agent: s.agent, app: s.app)
+                          root: s.root, agent: s.agent, app: s.app,
+                          kitty: SpeechController.KittyTarget(
+                              window: s.kitty_window ?? "", pid: s.kitty_pid ?? "",
+                              sock: s.kitty_sock ?? ""))
         }
 
         machine.ingest(line)
@@ -126,6 +129,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let root: String?
         let agent: String?
         let app: String?   // launching app's bundle id (from the hook)
+        let kitty_window: String?   // KITTY_WINDOW_ID, when launched in kitty
+        let kitty_pid: String?
+        let kitty_sock: String?     // KITTY_LISTEN_ON, if kitty set it
     }
 
     private func saveConfig() {

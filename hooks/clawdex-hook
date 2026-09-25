@@ -74,6 +74,14 @@ SOURCE="$(basename_of "$ROOT")"
 # VS Code, … — instead of a hardcoded editor. Falls back to TERM_PROGRAM; empty
 # over ssh/tmux/launchd, which the daemon reads as "use the default editor".
 APP="${__CFBundleIdentifier:-$TERM_PROGRAM}"
+# kitty stamps every child with the window it runs in (and the kitty instance's
+# PID), so a pill click can focus that exact tab over kitty's remote-control
+# socket rather than opening a fresh window. KITTY_LISTEN_ON is only set when
+# kitty's listen_on is configured — and not in windows launched with
+# --allow-remote-control — so the daemon derives the socket from the PID too.
+KITTY_WIN="${KITTY_WINDOW_ID:-}"
+KITTY_PID_="${KITTY_PID:-}"
+KITTY_SOCK="${KITTY_LISTEN_ON:-}"
 
 # JSON-escape a string for embedding in our one-line message. No jq — pure
 # sed/tr. Backslash first, then quote, then strip control chars.
@@ -175,7 +183,10 @@ TRANSCRIPT_ESC="$(json_escape "$TRANSCRIPT")"
 SOURCE_ESC="$(json_escape_short "$SOURCE")"
 ROOT_ESC="$(json_escape "$ROOT")"
 APP_ESC="$(json_escape "$APP")"
-MSG="{\"event\":\"$EVENT\",\"agent\":\"$AGENT\",\"tool\":\"$TOOL\",\"row\":$ROW,\"mode\":\"$MODE\",\"ttl\":$TTL,\"text\":\"$TEXT\",\"transcript\":\"$TRANSCRIPT_ESC\",\"source\":\"$SOURCE_ESC\",\"root\":\"$ROOT_ESC\",\"app\":\"$APP_ESC\",\"ts\":$TS}"
+KITTY_WIN_ESC="$(json_escape "$KITTY_WIN")"
+KITTY_PID_ESC="$(json_escape "$KITTY_PID_")"
+KITTY_SOCK_ESC="$(json_escape "$KITTY_SOCK")"
+MSG="{\"event\":\"$EVENT\",\"agent\":\"$AGENT\",\"tool\":\"$TOOL\",\"row\":$ROW,\"mode\":\"$MODE\",\"ttl\":$TTL,\"text\":\"$TEXT\",\"transcript\":\"$TRANSCRIPT_ESC\",\"source\":\"$SOURCE_ESC\",\"root\":\"$ROOT_ESC\",\"app\":\"$APP_ESC\",\"kitty_window\":\"$KITTY_WIN_ESC\",\"kitty_pid\":\"$KITTY_PID_ESC\",\"kitty_sock\":\"$KITTY_SOCK_ESC\",\"ts\":$TS}"
 
 # Best-effort send. If the daemon isn't running, exit silently. Use a short
 # timeout via the OS rather than nc flags (varies between BSD nc and ncat).

@@ -40,6 +40,8 @@ Codex sessions get their own switchboard pill, bubble, and accent color (`repo �
 
 Verify events with `tail -f ~/.clawdex/hook-trail.log` — look for `"agent":"codex"`. If nothing arrives, check `/hooks` for disabled or untrusted hooks and ensure hooks are enabled in your Codex configuration. The shared hook script uses `jq` for structured payload parsing when available, with a basic shell parser as a fallback.
 
+For kitty, enable `allow_remote_control socket-only` and `listen_on unix:${TMPDIR}/kitty` in `kitty.conf`, then restart kitty if these settings are new. Clawdex mirrors readiness onto the session's tab with a `●`/`○` marker and accent color. Codex can share a server across CLI clients, so its hook's inherited window ID may belong to another tab. Clawdex uses kitty's foreground Codex process and project directory to find the actual client, including one launched from a parent directory such as `projects`. If several Codex clients run in the same project, the mapping is ambiguous; clawdex leaves their tabs unchanged rather than choosing one. Failed updates retry on later events.
+
 ## Install
 
 One command, source-from-clone:

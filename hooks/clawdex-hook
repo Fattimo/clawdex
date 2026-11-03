@@ -9,8 +9,8 @@
 #
 # Codex and Claude Code share a hook contract — same PascalCase event names
 # (SessionStart/PreToolUse/PostToolUse/Stop/…), same stdin payload fields
-# (hook_event_name, tool_name, cwd, transcript_path). The one divergence we
-# care about: Codex fires `PermissionRequest` where Claude fires `Notification`.
+# (hook_event_name, tool_name, cwd, transcript_path). Codex also reports
+# Interrupt and uses native tool names such as apply_patch and update_plan.
 #
 # The ingesting agent is stamped onto every message so the daemon can label and
 # color each agent's sessions distinctly. Defaults to "claude"; Codex wires it
@@ -25,10 +25,17 @@ AGENT="${CLAWDEX_AGENT:-${1:-claude}}"
 
 # Read all stdin (Claude Code passes the hook payload as JSON).
 PAYLOAD="$(cat)"
+HAS_JQ="$(command -v jq 2>/dev/null || true)"
 
 # Tiny JSON field extractor. Avoids a jq dependency — clawdex must work on
 # any user's machine. Pulls a top-level string field by name.
 json_get() {
+  if [ -n "$HAS_JQ" ]; then
+    printf '%s' "$PAYLOAD" | jq -r --arg key "$1" '
+      (.[$key] // .tool_input[$key] // empty) | select(type == "string")
+    ' 2>/dev/null
+    return
+  fi
   printf '%s' "$PAYLOAD" \
     | tr -d '\n' \
     | sed -n 's/.*"'"$1"'"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
@@ -120,7 +127,7 @@ case "$EVENT" in
     case "$TOOL" in
       Bash|Edit|Write|MultiEdit|NotebookEdit)
         ROW=7; MODE=sticky ;;                   # running — doing work
-      Read|Grep|Glob|WebFetch|WebSearch)
+      Read|Grep|Glob|WebFetch|WebSearch|update_plan)
         ROW=8; MODE=sticky ;;                   # review — searching/reading
       *)
         ROW=7; MODE=sticky ;;
@@ -142,7 +149,7 @@ case "$EVENT" in
     # Claude ends the turn on an API error (rate limit, overload, auth) and
     # fires this INSTEAD of Stop. The agent is idle and waiting on you.
     ROW=5; MODE=transient ;;                    # failed — turn died
-  SessionEnd)
+  Interrupt|SessionEnd)
     ROW=0; MODE=release ;;                       # session closed — drop its pill
   PreCompact|PostCompact)
     ROW=8; MODE=sticky; TTL=1500 ;;             # review — compacting context
@@ -159,8 +166,12 @@ case "$EVENT" in
     NARRATION="thinking…" ;;
   PreToolUse)
     case "$TOOL" in
-      Bash)
+      Bash|exec_command|shell|shell_command)
         NARRATION="$(json_get command)" ;;
+      apply_patch)
+        NARRATION="Editing files" ;;
+      update_plan)
+        NARRATION="Updating the plan" ;;
       Edit|Write|MultiEdit|NotebookEdit)
         NARRATION="Editing $(basename_of "$(json_get file_path)")" ;;
       Read)
@@ -173,7 +184,7 @@ case "$EVENT" in
         NARRATION="Fetching a page" ;;
       WebSearch)
         NARRATION="Searching the web" ;;
-      Task)
+      Task|Agent|spawn_agent)
         NARRATION="Running a subagent…" ;;
       *)
         NARRATION="$TOOL" ;;
@@ -182,6 +193,8 @@ case "$EVENT" in
     NARRATION="waiting for you" ;;
   StopFailure)
     NARRATION="stopped on an error" ;;
+  Interrupt)
+    NARRATION="interrupted" ;;
   PreCompact|PostCompact)
     NARRATION="compacting…" ;;
   # SessionStart / Stop / SubagentStop: leave empty so the daemon shows the
@@ -199,6 +212,8 @@ KITTY_WIN_ESC="$(json_escape "$KITTY_WIN")"
 KITTY_PID_ESC="$(json_escape "$KITTY_PID_")"
 KITTY_SOCK_ESC="$(json_escape "$KITTY_SOCK")"
 SUBAGENT_ESC="$(json_escape "$SUBAGENT")"
+AGENT="$(json_escape "$AGENT")"
+TOOL="$(json_escape "$TOOL")"
 MSG="{\"event\":\"$EVENT\",\"agent\":\"$AGENT\",\"tool\":\"$TOOL\",\"row\":$ROW,\"mode\":\"$MODE\",\"ttl\":$TTL,\"text\":\"$TEXT\",\"transcript\":\"$TRANSCRIPT_ESC\",\"source\":\"$SOURCE_ESC\",\"root\":\"$ROOT_ESC\",\"app\":\"$APP_ESC\",\"kitty_window\":\"$KITTY_WIN_ESC\",\"kitty_pid\":\"$KITTY_PID_ESC\",\"kitty_sock\":\"$KITTY_SOCK_ESC\",\"subagent\":\"$SUBAGENT_ESC\",\"ts\":$TS}"
 
 # Best-effort send. If the daemon isn't running, exit silently. Use a short

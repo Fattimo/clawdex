@@ -3,6 +3,18 @@ import XCTest
 @testable import clawdexd
 
 final class StateMachineTests: XCTestCase {
+    func testInterruptAndSessionEndCancelPendingAnimation() {
+        for event in ["Interrupt", "SessionEnd"] {
+            var rows: [AnimationRow] = []
+            let machine = StateMachine { rows.append($0) }
+            machine.ingest(#"{"event":"PreToolUse","agent":"codex","row":7,"mode":"sticky"}"#)
+            machine.ingest(#"{"event":"Stop","agent":"codex","row":3,"mode":"transient","ttl":5000}"#)
+            machine.ingest("{\"event\":\"\(event)\",\"agent\":\"codex\",\"row\":0,\"mode\":\"release\"}")
+            RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+            XCTAssertEqual(rows, [.running, .waving, .idle])
+        }
+    }
+
     func testPostToolUseKeepsCurrentWorkingRowUntilNextEvent() {
         var rows: [AnimationRow] = []
         let machine = StateMachine { rows.append($0) }

@@ -1,4 +1,4 @@
-# State mapping: Claude Code events → Codex pet rows
+# State mapping: Claude Code / Codex CLI events → pet rows
 
 The Codex pet atlas defines exactly nine animation rows. Claude Code emits a
 larger set of hook events. This doc records how `clawdex-hook` collapses the
@@ -33,6 +33,13 @@ The fixed row layout (from
 | `Stop`, `SubagentStop`  |  3  | transient | wave goodbye / done                                     |
 | `StopFailure`           |  5  | transient | turn ended on an API error — sad pet, pill lights       |
 | `PreCompact`            |  8  | sticky    | reviewing/condensing — fits "review"                    |
+| `PostCompact`           |  8  | sticky    | context compaction finished                             |
+| `PermissionRequest`     |  6  | sticky    | Codex approval request; does not mark the turn complete  |
+| `PreToolUse` (`apply_patch`) | 7 | sticky | Codex file editing; narration says "Editing files"       |
+| `PreToolUse` (`update_plan`) | 8 | sticky | Codex planning                                           |
+| `Interrupt`             |  0  | release   | Codex turn interrupted; cancels animations and lights pill |
+| `SessionEnd`            |  0  | release   | cancel animations and remove the closed session's pill  |
+| `SubagentStart`         | -1  | release   | update the parent pill's subagent count                  |
 
 ## Modes
 
@@ -43,7 +50,12 @@ The fixed row layout (from
 - **release** — clears any sticky lock without forcing a new state. Daemon
   drops back to idle, but does not interrupt a transient that is still playing.
   Codex `PostToolUse` is the exception: it keeps the current work row alive so
-  internal tool boundaries do not flash the idle/blinking row.
+  internal tool boundaries do not flash the idle/blinking row. `Interrupt` and
+  `SessionEnd` cancel both sticky and transient animations immediately.
+
+Codex has no Claude-style statusline heartbeat. Incoming tool and lifecycle
+events also refresh the daemon's liveness timer; after 15 seconds without
+either events or heartbeats, sticky work falls back to idle.
 
 ## What we deliberately don't do
 

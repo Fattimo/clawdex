@@ -3,6 +3,20 @@ import XCTest
 @testable import clawdexd
 
 final class SpeechControllerTests: XCTestCase {
+    func testCodexCLIUsesItsLaunchingApp() {
+        for app in ["net.kovidgoyal.kitty", "com.apple.Terminal", "iTerm.app", "com.microsoft.VSCode"] {
+            XCTAssertFalse(SpeechController.usesCodexDesktop(agent: "codex", app: app))
+        }
+        XCTAssertTrue(SpeechController.usesCodexDesktop(agent: "codex", app: "com.openai.codex"))
+        XCTAssertTrue(SpeechController.usesCodexDesktop(agent: "codex", app: ""))
+        XCTAssertFalse(SpeechController.usesCodexDesktop(agent: "claude", app: ""))
+    }
+
+    func testCodexInterruptReadiness() {
+        XCTAssertEqual(SpeechController.litState(for: "Interrupt", agent: "codex"), true)
+        XCTAssertEqual(SpeechController.litState(for: "PreToolUse", agent: "codex"), false)
+    }
+
     func testMessageVisibilityNoneSuppressesBubbles() throws {
         let pet = PetWindow()
         let speech = SpeechController(

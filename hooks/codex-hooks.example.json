@@ -6,6 +6,9 @@
     "PostToolUse":      [{ "hooks": [{ "type": "command", "command": "HOOKS_DIR/clawdex-hook codex" }] }],
     "PermissionRequest":[{ "hooks": [{ "type": "command", "command": "HOOKS_DIR/clawdex-hook codex" }] }],
     "Stop":             [{ "hooks": [{ "type": "command", "command": "HOOKS_DIR/clawdex-hook codex" }] }],
+    "Interrupt":        [{ "hooks": [{ "type": "command", "command": "HOOKS_DIR/clawdex-hook codex", "timeout": 1 }] }],
+    "SessionEnd":       [{ "hooks": [{ "type": "command", "command": "HOOKS_DIR/clawdex-hook codex", "timeout": 1 }] }],
+    "SubagentStart":    [{ "hooks": [{ "type": "command", "command": "HOOKS_DIR/clawdex-hook codex" }] }],
     "SubagentStop":     [{ "hooks": [{ "type": "command", "command": "HOOKS_DIR/clawdex-hook codex" }] }],
     "PreCompact":       [{ "hooks": [{ "type": "command", "command": "HOOKS_DIR/clawdex-hook codex" }] }],
     "PostCompact":      [{ "hooks": [{ "type": "command", "command": "HOOKS_DIR/clawdex-hook codex" }] }]

@@ -52,6 +52,15 @@ final class StateMachine {
             return
         }
         guard let mode = Mode(rawValue: evt.mode) else { return }
+        // Codex has no statusline heartbeat. Real lifecycle/tool events also
+        // prove the session is alive, including after a long idle interval.
+        lastHeartbeat = Date()
+        if evt.event == "Interrupt" || evt.event == "SessionEnd" {
+            stickyRow = nil
+            transientUntil = nil
+            setRow(.idle)
+            return
+        }
 
         switch mode {
         case .transient:

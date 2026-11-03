@@ -59,6 +59,16 @@ else
   echo "    jq not available — edit $SETTINGS by hand to remove the clawdex hook entries."
 fi
 
+CODEX_HOOKS="${CODEX_HOME:-$HOME/.codex}/hooks.json"
+if [ -f "$CODEX_HOOKS" ]; then
+  echo "==> Stripping clawdex hooks from $CODEX_HOOKS"
+  if command -v jq >/dev/null 2>&1; then
+    sh "$(dirname "$0")/hooks/manage-codex-hooks" remove "$CODEX_HOOKS" "$CLAWDEX_HOME/hooks/clawdex-hook"
+  else
+    echo "    jq not available — remove clawdex handlers from $CODEX_HOOKS manually."
+  fi
+fi
+
 echo "==> Removing $CLAWDEX_HOME"
 rm -rf "$CLAWDEX_HOME"
 

@@ -1,0 +1,52 @@
+#!/bin/sh
+# Merge/remove only clawdex handlers; leave other hook sources and trust alone.
+# Usage: manage-codex-hooks install|remove hooks.json /absolute/clawdex-hook
+set -eu
+
+ACTION="$1"
+CONFIG="$2"
+HOOK="$3"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+case "$ACTION" in install|remove) ;; *) exit 1 ;; esac
+command -v jq >/dev/null 2>&1 || {
+  echo "jq is required to update $CONFIG; merge hooks/codex-hooks.example.json manually." >&2
+  exit 1
+}
+[ "$ACTION" = install ] || [ -f "$CONFIG" ] || exit 0
+mkdir -p "$(dirname "$CONFIG")"
+TMP="$(mktemp "$CONFIG.XXXXXX")"
+trap 'rm -f "$TMP"' EXIT HUP INT TERM
+
+# A command is interpreted by a shell. Quote the executable independently of
+# JSON encoding, including apostrophes in the user's home/install directory.
+QUOTED_HOOK="'$(printf '%s' "$HOOK" | sed "s/'/'\\\\''/g")' codex"
+INPUT="$CONFIG"
+[ -f "$INPUT" ] || INPUT=/dev/null
+jq -s --arg action "$ACTION" --arg command "$QUOTED_HOOK" \
+  --slurpfile template "$SCRIPT_DIR/codex-hooks.example.json" '
+  def owned:
+    (.type == "command") and
+    ((.command // "") | test("(^|[/ ])clawdex-hook[\u0027\u0022]?( |$)"));
+  (if length == 0 then {}
+   elif length == 1 and (.[0] | type) == "object" then .[0]
+   else error("expected one JSON configuration object") end) |
+  if .hooks then
+    .hooks |= with_entries(
+      .value |= map(
+        if any(.hooks[]; owned) then
+          .hooks |= map(select(owned | not)) |
+          select(.hooks | length > 0)
+        else . end
+      )
+    ) |
+    .hooks |= with_entries(select(.value | length > 0))
+  else . end |
+  if $action == "install" then
+    reduce ($template[0].hooks | to_entries[]) as $event (. ;
+      .hooks[$event.key] = ((.hooks[$event.key] // []) +
+        ($event.value | map(.hooks |= map(.command = $command))))
+    )
+  elif .hooks == {} then del(.hooks)
+  else . end
+' "$INPUT" > "$TMP"
+mv "$TMP" "$CONFIG"

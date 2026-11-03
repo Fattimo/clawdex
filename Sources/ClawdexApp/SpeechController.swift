@@ -211,7 +211,7 @@ final class SpeechController {
                        threadID: threadID, transcriptPath: transcriptPath ?? "",
                        app: launchApp, kitty: kitty, lit: lit,
                        compacting: event == "PreCompact",
-                       turnEnded: event == "Stop" || event == "StopFailure")
+                       turnEnded: event == "Stop" || event == "StopFailure" || event == "Interrupt")
         }
 
         // A user prompt (or session start) begins a NEW turn: there's no new
@@ -312,7 +312,7 @@ final class SpeechController {
         }
     }
 
-    /// Focus the session. Codex sessions deep-link straight to their thread
+    /// Focus the session. Desktop Codex sessions deep-link to their thread
     /// (codex://threads/<id>) when we know the id. Otherwise open in the app the
     /// session was launched from (captured by the hook): editors get the project
     /// folder; Claude Desktop is just brought to the front (a folder sends it to
@@ -320,8 +320,10 @@ final class SpeechController {
     /// the bubble, so it's the first lookup; the bubble is the fallback.
     private func openProject(source: String) {
         let isCodex = Self.agent(ofKey: source) == "codex"
+        let launchApp = pills[source]?.app ?? bubbles[source]?.app ?? ""
+        let useCodexApp = Self.usesCodexDesktop(agent: isCodex ? "codex" : "claude", app: launchApp)
 
-        if isCodex {
+        if useCodexApp {
             let threadID = pills[source]?.threadID ?? bubbles[source]?.threadID ?? ""
             if !threadID.isEmpty, let url = URL(string: "codex://threads/\(threadID)") {
                 NSWorkspace.shared.open(url)
@@ -337,17 +339,15 @@ final class SpeechController {
         // it from __CFBundleIdentifier). That way a click reopens the project in
         // Claude Desktop / VS Code / Zed / whatever you started from, instead of
         // a hardcoded editor. Empty over ssh/tmux/launchd → fall back to Zed.
-        let launchApp = pills[source]?.app ?? bubbles[source]?.app ?? ""
-
         let ws = NSWorkspace.shared
         let appURL: URL
         let name: String
-        if isCodex {
+        if useCodexApp {
             name = "Codex"
             appURL = ws.urlForApplication(withBundleIdentifier: "com.openai.codex")
                 ?? URL(fileURLWithPath: "/Applications/Codex.app")
         } else if !launchApp.isEmpty,
-                  let resolved = ws.urlForApplication(withBundleIdentifier: launchApp) {
+                  let resolved = ws.urlForApplication(withBundleIdentifier: Self.bundleID(for: launchApp)) {
             name = launchApp
             appURL = resolved
         } else {
@@ -372,11 +372,12 @@ final class SpeechController {
             return
         }
 
-        // Claude Desktop hosts its sessions in-app; handing it a folder drops you
+        // Terminals should activate their existing windows. Claude Desktop
+        // hosts its sessions in-app; handing it a folder drops you
         // in cowork rather than your session, so just bring the app to the front.
         // Editors (Zed, VS Code, …) do the right thing with a folder — open/focus
         // that project's window — so keep passing it to them.
-        if launchApp == "com.anthropic.claudefordesktop" {
+        if launchApp == "com.anthropic.claudefordesktop" || Self.isTerminalApp(launchApp) {
             ws.openApplication(at: appURL, configuration: cfg) { _, err in
                 if let err = err {
                     NSLog("clawdex: failed to focus \(name): \(err.localizedDescription)")
@@ -403,6 +404,27 @@ final class SpeechController {
     }
 
     private static let kittyBundleID = "net.kovidgoyal.kitty"
+
+    // CLI hooks identify their terminal/editor; opening a desktop Codex thread
+    // would send the user to a different client than the one doing the work.
+    static func usesCodexDesktop(agent: String, app: String) -> Bool {
+        agent == "codex" && (app.isEmpty || app == "com.openai.codex")
+    }
+
+    private static func bundleID(for app: String) -> String {
+        switch app {
+        case "Apple_Terminal": return "com.apple.Terminal"
+        case "iTerm.app": return "com.googlecode.iterm2"
+        case "ghostty": return "com.mitchellh.ghostty"
+        case "WezTerm": return "com.github.wez.wezterm"
+        default: return app
+        }
+    }
+
+    private static func isTerminalApp(_ app: String) -> Bool {
+        ["com.apple.Terminal", "com.googlecode.iterm2", "com.mitchellh.ghostty",
+         "com.github.wez.wezterm", "io.alacritty", kittyBundleID].contains(bundleID(for: app))
+    }
 
     /// Resolve the kitty instance's remote-control socket. Prefers the hook's
     /// KITTY_LISTEN_ON; otherwise assumes `listen_on unix:${TMPDIR}/kitty`, which
@@ -614,12 +636,12 @@ final class SpeechController {
     ///   hook at all — the transcript marker covers it, see scanTranscripts.
     /// - Codex has no waiting-on-you event we can trust: its PermissionRequest
     ///   fires mid-turn while it keeps working, and it emits no Stop on a user
-    ///   abort (the transcript abort marker covers that, see scanTranscripts).
-    ///   So only Stop lights it; everything ambiguous is left as-is.
+    ///   abort. Interrupt lights it directly; transcript scanning also covers
+    ///   aborts from clients without that hook. Ambiguous events leave it as-is.
     static func litState(for event: String, agent: String) -> Bool? {
         if agent == "codex" {
             switch event {
-            case "Stop":
+            case "Stop", "Interrupt":
                 return true
             case "SessionStart", "UserPromptSubmit", "PreToolUse",
                  "PreCompact", "PostCompact":

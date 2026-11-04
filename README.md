@@ -106,6 +106,82 @@ The atlas format, animation row schedule, and validator are spec-compatible with
 
 Full table with rationale: [`docs/state-mapping.md`](docs/state-mapping.md).
 
+## GitHub PR scorebug
+
+Clawdex can watch your PR chains in a compact scorebug below the dog. It
+discovers your open PRs by repository and groups branches whose base points to
+another PR's head. Cached chain membership survives parent merges and GitHub
+retargeting. Single PRs get their own entry; explicit chains can also be named.
+The scorebug uses one opaque neutral strip, 38 points tall, with the chain name
+above its status. It sits 4 points below the dog and spans the dog
+and both session columns. Session switches alternate evenly on either side,
+each as wide as the dog; the latest chat update appears centered above it.
+The strip shows chains represented by the four most recently
+updated open PRs (provisionally using GitHub's `updatedAt`, pending a refined
+activity heuristic). It rotates through one chain at a time every eight seconds,
+pausing while hovered. Multiple recent PRs in one chain share an entry. All PRs
+remain tracked. Click to open the next unmerged PR directly at GitHub's merge
+section. Hover for the full status; hide and refresh remain available through
+the CLI. The companion stays within the
+screen edges when dragged or resized. Scorebug visibility is independent in Settings.
+
+Install `gh` and `ngrok`, sign in with `gh auth login`, and configure ngrok's
+authentication token locally using its dashboard instructions. The daemon
+starts and supervises ngrok when GitHub tracking is enabled; it already starts
+at login through launchd. No separate hosted backend or regular GitHub polling
+is used. Initial startup, wake, manual refresh and relevant signed webhooks
+refresh data. Ngrok reconnects use bounded backoff, and wake/reconnect triggers
+a catch-up refresh.
+
+```bash
+clawdex github setup owner/repo
+clawdex github status
+# To select a different assigned/custom endpoint later:
+# clawdex github setup owner/repo --url https://your-ngrok-domain
+# clawdex github setup owner/repo --auto-url
+# Once ngrok is connected, register this receiver on that repository:
+clawdex github hook owner/repo
+```
+
+The `hook` command needs repository webhook administration permission. It
+creates or updates only the hook for this receiver's URL. The generated signing
+secret lives in `~/.clawdex/github/config.json` with owner-only permissions;
+GitHub credentials stay in `gh` and ngrok credentials in ngrok's own config.
+Ngrok accounts must have a verified email. The status command reports this
+setup requirement if the provider refuses the connection. A URL is considered
+connected only after ngrok reports that the tunnel started. If your account
+assigns a new URL on reconnect, clawdex updates only its previously registered
+repository hook to the new endpoint. It keeps pills offline until that update
+succeeds. No paid static domain is required. Explicit `--url` remains available
+for accounts with an assigned/reserved domain they can reuse.
+The HTTP receiver binds only to `127.0.0.1:47839`, validates HMAC-SHA256 on the
+raw body, rejects oversized/ambiguous requests, and deduplicates deliveries.
+HTTP introspection is disabled in the managed ngrok process. GitHub remains
+the source of truth: incoming payloads invalidate data rather than directly
+declaring PRs ready.
+
+```bash
+clawdex github refresh
+clawdex github track 'billing' https://github.com/owner/repo/pull/123 https://github.com/owner/repo/pull/124
+clawdex github hide 'owner/repo#123'  # IDs are listed by github status
+clawdex github show 'owner/repo#123'
+clawdex github disable
+```
+
+Manual stack PR URLs must be from the same repository, in base-to-tip order.
+“Ready” requires every remaining PR to have completed checks, no required
+review outstanding and a clean GitHub merge state. Passing checks alone does
+not make a blocked PR ready. Disconnected receivers, missing webhook setup,
+incomplete data and failed API refreshes display offline/unknown status rather
+than a green pill. After the entire chain merges, its pill disappears and its
+history remains cached. This version opens PRs in GitHub; it does not merge them.
+
+Core tests (no pet/window tests):
+
+```bash
+swift test --jobs 2 --filter GitHubTests
+```
+
 ## Development
 
 ```bash

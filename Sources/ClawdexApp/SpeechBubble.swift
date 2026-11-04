@@ -3,7 +3,7 @@ import AppKit
 /// A floating speech bubble shown above the pet. Borderless, all-spaces, added
 /// as a child window of the pet so it follows drags.
 ///
-/// One bubble per concurrent session; the `[source]` label (the project the
+/// The latest session update; the source label (the project the
 /// event came from) lets you tell them apart. Click the body to open the
 /// project; click the ✕ in the corner to dismiss.
 final class SpeechBubbleWindow: NSPanel {
@@ -76,12 +76,12 @@ final class SpeechBubbleWindow: NSPanel {
         let tw = min(maxTextWidth, ceil(fit.width) + 1)
         let th = min(ceil(fit.height), CGFloat(maxLines) * lineHeight)
         let w = padL + tw + padR
-        let h = th + padV * 2
+        let h = th + padV * 2 + 6
 
         let size = NSSize(width: w, height: h)
         setContentSize(size)
         bubble.frame = NSRect(origin: .zero, size: size)
-        label.frame = NSRect(x: padL, y: padV, width: tw, height: th)
+        label.frame = NSRect(x: padL, y: padV + 6, width: tw, height: th)
         bubble.needsDisplay = true
         return size
     }
@@ -91,10 +91,11 @@ final class SpeechBubbleWindow: NSPanel {
     static func attributed(source: String, message: String, isFinal: Bool, accent: NSColor) -> NSAttributedString {
         let para = NSMutableParagraphStyle()
         para.lineBreakMode = .byWordWrapping
+        para.alignment = .center
 
         let out = NSMutableAttributedString()
         if !source.isEmpty {
-            out.append(NSAttributedString(string: "[\(source)] ", attributes: [
+            out.append(NSAttributedString(string: "\(source)\n", attributes: [
                 .font: labelFont,
                 .foregroundColor: accent,
                 .paragraphStyle: para,
@@ -127,7 +128,7 @@ final class SpeechBubbleWindow: NSPanel {
     }
 }
 
-/// Plain rounded-rect speech bubble background (no tail). Draws a ✕ in the
+/// Rounded speech bubble with a centered tail. Draws a ✕ in the
 /// top-right gutter and routes clicks: ✕ → onClose, anywhere else → onOpen.
 final class BubbleView: NSView {
     var closeSize: CGFloat = 16
@@ -157,24 +158,15 @@ final class BubbleView: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        let r = bounds.insetBy(dx: 0.5, dy: 0.5)
+        let r = NSRect(x: 0.5, y: 6.5, width: bounds.width - 1, height: bounds.height - 7)
         let path = NSBezierPath(roundedRect: r, xRadius: 10, yRadius: 10)
+        let tail = NSBezierPath()
+        tail.move(to: NSPoint(x: bounds.midX - 6, y: 7))
+        tail.line(to: NSPoint(x: bounds.midX, y: 0))
+        tail.line(to: NSPoint(x: bounds.midX + 6, y: 7))
+        tail.close()
         backgroundGray().setFill()
-        path.fill()
-
-        // Colored left accent bar marking the environment. Clipped to the
-        // rounded body so it follows the left corners.
-        if accentColor.alphaComponent > 0 {
-            NSGraphicsContext.saveGraphicsState()
-            path.addClip()
-            accentColor.setFill()
-            NSRect(x: 0, y: 0, width: 4, height: bounds.height).fill()
-            NSGraphicsContext.restoreGraphicsState()
-        }
-
-        NSColor.separatorColor.setStroke()
-        path.lineWidth = 1
-        path.stroke()
+        path.fill(); tail.fill()
 
         // ✕ glyph
         let c = closeRect()

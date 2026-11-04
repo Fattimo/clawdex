@@ -51,7 +51,7 @@ final class PillWindow: NSPanel {
 
     /// Set the pill's label / state and resize to fit. Returns the new size.
     @discardableResult
-    func setContent(label text: String, lit: Bool, accent: NSColor) -> NSSize {
+    func setContent(label text: String, lit: Bool, accent: NSColor, fixedWidth: CGFloat? = nil) -> NSSize {
         view.title = text
         view.lit = lit
         view.accent = accent
@@ -59,7 +59,9 @@ final class PillWindow: NSPanel {
         let tw = min(Self.maxLabelWidth,
                      ceil((text as NSString).size(withAttributes: [.font: PillView.font]).width) + 1)
         let w = PillView.padL + PillView.dotSize + PillView.dotGap + tw + PillView.padR
-        let size = NSSize(width: w, height: Self.height)
+        let size = NSSize(width: fixedWidth ?? w, height: Self.height)
+        view.toolTip = text
+        view.setAccessibilityLabel(text)
         setContentSize(size)
         view.frame = NSRect(origin: .zero, size: size)
         view.needsDisplay = true
@@ -207,10 +209,12 @@ final class PillView: NSView {
 
         // Label.
         let textColor: NSColor = lit ? (dark ? .white : .labelColor) : .tertiaryLabelColor
-        let attrs: [NSAttributedString.Key: Any] = [.font: Self.font, .foregroundColor: textColor]
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineBreakMode = .byTruncatingTail
+        let attrs: [NSAttributedString.Key: Any] = [.font: Self.font, .foregroundColor: textColor, .paragraphStyle: paragraph]
         let tx = Self.padL + Self.dotSize + Self.dotGap
         let tsize = (title as NSString).size(withAttributes: attrs)
-        let avail = bounds.width - tx - Self.padR
+        let avail = bounds.width - tx - Self.padR - (isHovering ? Self.closeSize + 3 : 0)
         let drawRect = NSRect(x: tx, y: cy - tsize.height / 2, width: max(0, avail), height: tsize.height)
         (title as NSString).draw(in: drawRect, withAttributes: attrs)
 

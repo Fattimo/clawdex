@@ -28,6 +28,19 @@ final class PetWindow: NSPanel {
     /// Fired after a resize drag settles on a new scale.
     var onScaleChanged: ((CGFloat) -> Void)?
 
+    var companionSideInset: CGFloat = 0
+    var companionBottomInset: CGFloat = 0
+    var companionSpeechInset: CGFloat = 0
+    var companionSessionInset: CGFloat = 0
+
+    func constrainCompanionToScreen() {
+        guard let screen = (screen ?? NSScreen.main)?.visibleFrame else { return }
+        let adjusted = CompanionLayout.constrainedPet(frame, screen: screen,
+            sides: max(companionSideInset, companionBottomInset > 0 ? CompanionLayout.sideInset(frame) : 0),
+            bottom: companionBottomInset, top: max(companionSpeechInset, companionSessionInset))
+        if adjusted.origin != frame.origin { setFrameOrigin(adjusted.origin) }
+    }
+
     /// On-screen scale. 0.5 → pixel-perfect on Retina (1 source px = 1 native px).
     /// 1.0 → 2× pixel-doubled (still crisp via nearest-neighbor + contentsScale).
     private var scale: CGFloat

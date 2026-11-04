@@ -3,6 +3,45 @@ import XCTest
 @testable import clawdexd
 
 final class SpeechControllerTests: XCTestCase {
+    func testLatestBubbleIsCenteredAndGitHubUsesTheSameMessageSlot() throws {
+        let pet = PetWindow()
+        let speech = SpeechController(pet: pet, config: ClawdexConfig(showSwitchboard: false))
+        for source in ["app", "api", "web"] {
+            speech.handle(event: "Stop", narration: "Finished in \(source)", transcriptPath: nil,
+                          source: source, root: "/tmp/\(source)", agent: "codex")
+            RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+        }
+        var bubbles = pet.childWindows?.compactMap { $0 as? SpeechBubbleWindow } ?? []
+        XCTAssertEqual(bubbles.count, 1)
+        let latest = try XCTUnwrap(bubbles.first)
+        XCTAssertEqual(latest.frame.midX, pet.frame.midX, accuracy: 0.5)
+        XCTAssertGreaterThan(latest.frame.minY, pet.frame.maxY)
+        var opened = false
+        speech.announceGitHub("Billing is green") { opened = true }
+        RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+        bubbles = pet.childWindows?.compactMap { $0 as? SpeechBubbleWindow } ?? []
+        XCTAssertEqual(bubbles.count, 1)
+        try XCTUnwrap(bubbles.first).onOpen?()
+        XCTAssertTrue(opened)
+    }
+
+    func testFourSessionsKeepEqualWidthsAndBalancedColumnsAfterResize() throws {
+        let pet = PetWindow()
+        let speech = SpeechController(pet: pet, config: ClawdexConfig(messageVisibility: .none))
+        for source in ["app", "clawdex", "api", "web"] {
+            speech.handle(event: "SessionStart", narration: nil, transcriptPath: nil,
+                          source: source, root: "/tmp/\(source)", agent: "codex")
+        }
+        RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+        for scale in [0.5, 1.0] {
+            pet.setScale(scale)
+            let switches = pet.childWindows?.compactMap { $0 as? PillWindow } ?? []
+            XCTAssertEqual(switches.count, 4)
+            XCTAssertEqual(switches.filter { $0.frame.midX < pet.frame.midX }.count, 2)
+            XCTAssertEqual(switches.filter { $0.frame.midX > pet.frame.midX }.count, 2)
+            for window in switches { XCTAssertEqual(window.frame.width, CompanionLayout.dogWidth(pet.frame)) }
+        }
+    }
     func testCodexCLIUsesItsLaunchingApp() {
         for app in ["net.kovidgoyal.kitty", "com.apple.Terminal", "iTerm.app", "com.microsoft.VSCode"] {
             XCTAssertFalse(SpeechController.usesCodexDesktop(agent: "codex", app: app))

@@ -3,6 +3,14 @@ import XCTest
 @testable import clawdexd
 
 final class ClawdexConfigTests: XCTestCase {
+    func testOlderSettingsKeepTheirValuesWhenGitHubToggleIsMissing() throws {
+        let old = Data(#"{"messageVisibility":"none","showSwitchboard":false,"petScale":1.1}"#.utf8)
+        let config = try JSONDecoder().decode(ClawdexConfig.self, from: old)
+        XCTAssertEqual(config.messageVisibility, .none)
+        XCTAssertFalse(config.showSwitchboard)
+        XCTAssertTrue(config.showGitHubSwitchboard)
+        XCTAssertEqual(config.petScale, 1.1, accuracy: 0.001)
+    }
     func testConfigRoundTripsMessageVisibilitySwitchboardAndScale() throws {
         let path = FileManager.default.temporaryDirectory
             .appendingPathComponent("clawdex-config-\(UUID().uuidString).json")

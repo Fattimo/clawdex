@@ -38,9 +38,10 @@ private final class SettingsViewController: NSViewController {
         target: nil,
         action: nil
     )
+    private let githubControl = NSSegmentedControl(labels: ["Yes", "No"], trackingMode: .selectOne, target: nil, action: nil)
 
     override func loadView() {
-        let root = NSView(frame: NSRect(x: 0, y: 0, width: 230, height: 102))
+        let root = NSView(frame: NSRect(x: 0, y: 0, width: 230, height: 155))
         let stack = NSStackView()
         stack.orientation = .vertical
         stack.alignment = .leading
@@ -51,9 +52,12 @@ private final class SettingsViewController: NSViewController {
         messagesControl.action = #selector(messagesChanged)
         switchboardControl.target = self
         switchboardControl.action = #selector(switchboardChanged)
+        githubControl.target = self
+        githubControl.action = #selector(githubChanged)
 
         stack.addArrangedSubview(row(label: "Show messages", control: messagesControl))
         stack.addArrangedSubview(row(label: "Show switchboard", control: switchboardControl))
+        stack.addArrangedSubview(row(label: "Show GitHub stacks", control: githubControl))
         root.addSubview(stack)
         NSLayoutConstraint.activate([
             stack.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 14),
@@ -68,6 +72,7 @@ private final class SettingsViewController: NSViewController {
         self.config = config
         messagesControl.selectedSegment = MessageVisibility.allCases.firstIndex(of: config.messageVisibility) ?? 0
         switchboardControl.selectedSegment = config.showSwitchboard ? 0 : 1
+        githubControl.selectedSegment = config.showGitHubSwitchboard ? 0 : 1
     }
 
     @objc private func messagesChanged() {
@@ -78,6 +83,10 @@ private final class SettingsViewController: NSViewController {
 
     @objc private func switchboardChanged() {
         config.showSwitchboard = switchboardControl.selectedSegment == 0
+        onChange?(config)
+    }
+    @objc private func githubChanged() {
+        config.showGitHubSwitchboard = githubControl.selectedSegment == 0
         onChange?(config)
     }
 

@@ -3,10 +3,8 @@ import Foundation
 
 /// Decides what the pet "says" and drives the speech bubbles.
 ///
-/// One bubble per source (the project a session runs in), so several concurrent
-/// Claude Code sessions each get their own labeled bubble, stacked above the
-/// pet. A source's bubble updates in place and resets its dwell timer; bubbles
-/// fade out and the stack re-flows when they expire.
+/// The latest update appears in one labeled bubble centered above the pet.
+/// Session switches remain visible independently of the message's lifetime.
 ///
 /// Two speech sources, in priority order:
 ///   1. Real prose — the latest assistant text block from the session
@@ -15,6 +13,7 @@ import Foundation
 ///      ("Editing main.swift") shown when there's no fresh prose, e.g.
 ///      mid-tool-call.
 final class SpeechController {
+    var onPillLayout: (() -> Void)?
     /// The kitty window a session runs in (from the hook's KITTY_* env), so a
     /// click can focus that exact tab over kitty's remote-control socket.
     struct KittyTarget: Equatable {
@@ -82,7 +81,7 @@ final class SpeechController {
         var backgroundJobs: [String: Date] = [:] // backgroundTaskId → launch
         var sawAbort = false
     }
-    private var pillOrder: [String] = []        // oldest → newest, bottom → top
+    private var pillOrder: [String] = []        // oldest → newest, alternating sides
     private var pills: [String: Pill] = [:]
     private let pillIdleTimeout: TimeInterval = 600   // 10 min quiet → prune
     /// A dim Claude pill with nothing in flight and no activity for this long
@@ -93,14 +92,9 @@ final class SpeechController {
     /// Background jobs whose completion notification never arrives (session
     /// killed, daemon restart) stop showing "…" after this long.
     private let backgroundJobTimeout: TimeInterval = 7200
-    private let pillGap: CGFloat = 2            // near-flush to the visible body
     private let badgeGap: CGFloat = 4           // pill ↔ its subagent badge
-    /// Transparent padding inside the pet's window frame (the sprite doesn't
-    /// fill the cell). Anchoring to the frame leaves a dead gap, so we pull in
-    /// by this much to hug the actual artwork. ~8pt at the default 0.75 scale.
-    private let petArtInset: CGFloat = 8
 
-    private let maxBubbles = 5
+    private let maxBubbles = 1
     private let gap: CGFloat = 6
 
     /// Bank of contrasting, theme-adapting workspace colors. Each environment
@@ -137,7 +131,7 @@ final class SpeechController {
         self.config = config
         // Keep the switchboard glued to the pet (and on the correct side) as it
         // is dragged around the screen.
-        pet.onMoved = { [weak self] in self?.relayoutPills() }
+        pet.onMoved = { [weak self] in self?.relayoutPills(); self?.relayout() }
         // Sweep out sessions that have gone quiet.
         Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
             self?.prunePills()
@@ -265,7 +259,8 @@ final class SpeechController {
     }
 
     private func show(source: String, label: String, root: String, threadID: String,
-                      app: String, kitty: KittyTarget, text raw: String, isFinal: Bool) {
+                      app: String, kitty: KittyTarget, text raw: String, isFinal: Bool,
+                      onOpen: (() -> Void)? = nil) {
         let text = Self.clean(raw)
         guard !text.isEmpty else { return }
         DispatchQueue.main.async { [weak self] in
@@ -282,12 +277,15 @@ final class SpeechController {
                 pet.addChildWindow(bubble.window, ordered: .above)
                 self.bubbles[source] = bubble
                 self.order.append(source)
-                self.evictOverflow()
             }
             if !root.isEmpty { bubble.root = root }
             if !threadID.isEmpty { bubble.threadID = threadID }
             if !app.isEmpty { bubble.app = app }
             if !kitty.isEmpty { bubble.kitty = kitty }
+            if let onOpen { bubble.window.onOpen = onOpen }
+            self.order.removeAll { $0 == source }
+            self.order.append(source)
+            self.evictOverflow()
 
             bubble.size = bubble.window.setContent(source: label, message: text,
                                                    isFinal: isFinal, accent: self.color(for: source))
@@ -309,7 +307,8 @@ final class SpeechController {
             let oldest = order.removeFirst()
             if let b = bubbles.removeValue(forKey: oldest) {
                 b.timer?.invalidate()
-                b.window.fadeOut()
+                b.window.orderOut(nil)
+                pet?.removeChildWindow(b.window)
             }
         }
     }
@@ -646,23 +645,26 @@ final class SpeechController {
         relayout()
     }
 
-    /// Stack the live bubbles above the pet, all sharing one left edge so they
-    /// line up instead of each centering on its own width.
+    func announceGitHub(_ message: String, onOpen: @escaping () -> Void) {
+        guard shouldShowMessage(isFinal: true) else { return }
+        show(source: "GitHub", label: "GitHub", root: "", threadID: "", app: "",
+             kitty: KittyTarget(), text: message, isFinal: true, onOpen: onOpen)
+    }
+
+    /// The latest message sits centered above the dog.
     private func relayout() {
         guard let pet = pet else { return }
+        pet.companionSpeechInset = order.compactMap { bubbles[$0]?.size.height }.max().map { $0 + gap } ?? 0
+        pet.constrainCompanionToScreen()
         let pf = pet.frame
-        let widest = order.compactMap { bubbles[$0]?.size.width }.max() ?? 0
-
-        // Common left anchor near the pet, clamped so even the widest bubble
-        // stays on-screen.
-        var x = pf.minX
-        if let v = (pet.screen ?? NSScreen.main)?.visibleFrame {
-            x = min(max(x, v.minX + 4), v.maxX - widest - 4)
-        }
-
         var y = pf.maxY + gap
         for source in order {
             guard let b = bubbles[source] else { continue }
+            var x = pf.midX - b.size.width / 2
+            if let v = (pet.screen ?? NSScreen.main)?.visibleFrame {
+                x = min(max(x, v.minX + 4), v.maxX - b.size.width - 4)
+                y = min(y, v.maxY - b.size.height - 4)
+            }
             b.window.setFrameOrigin(NSPoint(x: x, y: y))
             y += b.size.height + gap
         }
@@ -993,40 +995,26 @@ final class SpeechController {
         return (String(decoding: data, as: UTF8.self), offset + UInt64(data.count))
     }
 
-    /// Stack the pills vertically beside the pet, bottom-aligned with the pet's
-    /// feet and growing upward (oldest at the bottom). Hugs the pet's right
-    /// side, flipping to the left (right-aligned to the pet) when the pet is
-    /// parked against the screen's right edge.
+    /// Alternate equal-width switches on either side of the dog.
     private func relayoutPills() {
         guard let pet = pet else { return }
-        let pf = pet.frame
-        let widest = pillOrder.compactMap { source -> CGFloat? in
-            guard let pill = pills[source] else { return nil }
-            return pill.size.width
-                + (pill.badgeContent == nil ? 0 : badgeGap + SubagentBadgeWindow.size)
-        }.max() ?? 0
-
-        // Anchor to the visible sprite edges, not the padded window frame.
-        let rightEdge = pf.maxX - petArtInset
-        let leftEdge = pf.minX + petArtInset
-
-        var onLeft = false
-        if let v = (pet.screen ?? NSScreen.main)?.visibleFrame,
-           rightEdge + pillGap + widest > v.maxX - 4 {
-            onLeft = true
-        }
-
-        var y = pf.minY
-        for source in pillOrder {
+        let badgeSpace = pills.values.contains { $0.badgeContent != nil } ? badgeGap + SubagentBadgeWindow.size : 0
+        pet.companionSideInset = pillOrder.isEmpty ? 0 : CompanionLayout.sideInset(pet.frame) + badgeSpace
+        let rows = (pillOrder.count + 1) / 2
+        pet.companionSessionInset = max(0, 10 + CGFloat(rows) * (PillWindow.height + CompanionLayout.rowGap) - CompanionLayout.rowGap - pet.frame.height)
+        pet.constrainCompanionToScreen()
+        for (index, source) in pillOrder.enumerated() {
             guard let pill = pills[source] else { continue }
-            let x = onLeft ? leftEdge - pillGap - pill.size.width : rightEdge + pillGap
-            pill.window.setFrameOrigin(NSPoint(x: x, y: y))
+            let frame = CompanionLayout.sessionFrame(index: index, pet: pet.frame)
+            pill.size = pill.window.setContent(label: pill.label, lit: pill.lit,
+                accent: color(for: source), fixedWidth: frame.width)
+            pill.window.setFrameOrigin(frame.origin)
             // Subagent badge on the pill's outward side, away from the pet.
-            let bx = onLeft ? x - badgeGap - SubagentBadgeWindow.size
-                            : x + pill.size.width + badgeGap
-            pill.badge.setFrameOrigin(NSPoint(x: bx, y: y))
-            y += PillWindow.height + pillGap
+            let bx = index.isMultiple(of: 2) ? frame.minX - badgeGap - SubagentBadgeWindow.size
+                                            : frame.maxX + badgeGap
+            pill.badge.setFrameOrigin(NSPoint(x: bx, y: frame.minY))
         }
+        onPillLayout?()
     }
 
     // MARK: - Labeling

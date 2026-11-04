@@ -20,6 +20,7 @@ guard args.count >= 2 else {
       clawdex tuck              hide the pet
       clawdex select <id>       switch to pet <id> (folder name under ~/.codex/pets)
       clawdex list              list discovered pets
+      clawdex github            manage GitHub PR stacks and webhook setup
     """)
     exit(2)
 }
@@ -81,6 +82,12 @@ func discover() -> [(String, String, URL)] {
 }
 
 switch cmd {
+case "github":
+    do { try GitHubCommands.run(Array(args.dropFirst(2)), send: send) }
+    catch {
+        FileHandle.standardError.write(Data("clawdex github: \(error.localizedDescription)\n".utf8))
+        exit(1)
+    }
 case "wake":
     send(["control": "wake"])
 case "tuck":

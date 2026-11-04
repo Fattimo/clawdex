@@ -10,13 +10,20 @@ let package = Package(
         .macOS(.v13)
     ],
     targets: [
+        .target(name: "ClawdexGitHub", path: "Sources/ClawdexGitHub"),
         .executableTarget(
             name: "clawdexd",
+            dependencies: ["ClawdexGitHub"],
             path: "Sources/ClawdexApp"
         ),
         .executableTarget(
             name: "clawdex",
+            dependencies: ["ClawdexGitHub"],
             path: "Sources/ClawdexCLI"
+        ),
+        .testTarget(
+            name: "ClawdexGitHubTests",
+            dependencies: ["ClawdexGitHub"]
         ),
         .testTarget(
             name: "ClawdexAppTests",

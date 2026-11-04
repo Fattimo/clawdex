@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import ClawdexGitHub
 
 // clawdex daemon entry point. Brings up:
 //   - an NSApplication (no menu bar — we set LSUIElement-equivalent at runtime).
@@ -12,6 +13,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var server: SocketServer!
     private var machine: StateMachine!
     private var speech: SpeechController!
+    private var githubBoard: GitHubBoardController!
+    private var github: GitHubService?
+    private var githubConfig: GitHubConfig?
+    private var githubSnapshot = GitHubSnapshot()
+    private var wakeObserver: NSObjectProtocol?
+    private var terminationSignals: [DispatchSourceSignal] = []
+    private var githubGeneration = UUID()
     private var config = ClawdexConfig()
     private let settingsPopover = SettingsPopover()
 
@@ -19,6 +27,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Hide from Dock & Cmd-Tab. LSUIElement set programmatically since we ship
         // a single binary without an Info.plist app bundle.
         NSApp.setActivationPolicy(.accessory)
+        for sig in [SIGTERM, SIGINT] {
+            signal(sig, SIG_IGN)
+            let source = DispatchSource.makeSignalSource(signal: sig, queue: .main)
+            source.setEventHandler { NSApp.terminate(nil) }; source.resume(); terminationSignals.append(source)
+        }
 
         if let loaded = try? ClawdexConfig.load() {
             config = loaded
@@ -41,6 +54,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         speech = SpeechController(pet: window, config: config)
+        githubBoard = GitHubBoardController(pet: window)
+        speech.onPillLayout = { [weak self] in self?.githubBoard.anchor() }
+        githubBoard.onNotice = { [weak self] message, onOpen in self?.speech.announceGitHub(message, onOpen: onOpen) }
+        reloadGitHub()
+        wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in self?.github?.refresh(reconnect: true) }
         window.onSettings = { [weak self] view, rect in
             guard let self else { return }
             self.settingsPopover.show(from: view, rect: rect, config: self.config)
@@ -55,6 +73,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.config = config
             self.saveConfig()
             self.speech.updateConfig(config)
+            self.githubBoard.update(config: self.githubConfig, snapshot: self.githubSnapshot, visible: config.showGitHubSwitchboard)
         }
 
         let sockPath = ProcessInfo.processInfo.environment["CLAWDEX_SOCK"]
@@ -78,6 +97,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         server?.stop()
+        github?.stop()
+        if let wakeObserver { NSWorkspace.shared.notificationCenter.removeObserver(wakeObserver) }
     }
 
     /// CLI commands are sent as JSON over the same socket as hook events. We
@@ -91,6 +112,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 switch verb {
                 case "wake": self?.window.wake()
                 case "tuck": self?.window.tuck()
+                case "github-reload": self?.reloadGitHub()
+                case "github-refresh": self?.refreshGitHub()
                 case "select":
                     if let id = obj["id"] as? String {
                         let pets = PetLibrary.discover()
@@ -142,6 +165,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } catch {
             NSLog("clawdex: failed to save config: \(error)")
         }
+    }
+
+    private func reloadGitHub() {
+        githubGeneration = UUID(); let generation = githubGeneration
+        github?.stop(); github = nil
+        githubConfig = try? GitHubStore.loadConfig(); githubSnapshot = GitHubStore.loadSnapshot()
+        githubBoard.update(config: githubConfig, snapshot: githubSnapshot, visible: config.showGitHubSwitchboard)
+        guard let config = githubConfig, config.enabled else { return }
+        let service = GitHubService(config: config) { [weak self] state in
+            guard let self, self.githubGeneration == generation else { return }; self.githubSnapshot = state
+            self.githubBoard.update(config: self.githubConfig, snapshot: state, visible: self.config.showGitHubSwitchboard)
+        }
+        github = service; service.start()
+    }
+    private func refreshGitHub() {
+        if !githubSnapshot.receiverReady { reloadGitHub() }
+        else { github?.refresh(reconnect: githubSnapshot.tunnelURL == nil) }
     }
 }
 

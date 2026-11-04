@@ -28,9 +28,9 @@ final class SpeechControllerTests: XCTestCase {
     func testFourSessionsKeepEqualWidthsAndBalancedColumnsAfterResize() throws {
         let pet = PetWindow()
         let speech = SpeechController(pet: pet, config: ClawdexConfig(messageVisibility: .none))
-        for source in ["app", "clawdex", "api", "web"] {
+        for (source, agent) in [("app", "codex"), ("clawdex", "claude"), ("api", "codex"), ("web", "claude")] {
             speech.handle(event: "SessionStart", narration: nil, transcriptPath: nil,
-                          source: source, root: "/tmp/\(source)", agent: "codex")
+                          source: source, root: "/tmp/\(source)", agent: agent)
         }
         RunLoop.main.run(until: Date().addingTimeInterval(0.3))
         for scale in [0.5, 1.0] {
@@ -39,7 +39,11 @@ final class SpeechControllerTests: XCTestCase {
             XCTAssertEqual(switches.count, 4)
             XCTAssertEqual(switches.filter { $0.frame.midX < pet.frame.midX }.count, 2)
             XCTAssertEqual(switches.filter { $0.frame.midX > pet.frame.midX }.count, 2)
-            for window in switches { XCTAssertEqual(window.frame.width, CompanionLayout.dogWidth(pet.frame)) }
+            for window in switches {
+                XCTAssertEqual(window.frame.width, CompanionLayout.dogWidth(pet.frame))
+                if ["app", "api"].contains(window.contentView?.toolTip ?? "") { XCTAssertGreaterThan(window.frame.midX, pet.frame.midX) }
+                else { XCTAssertLessThan(window.frame.midX, pet.frame.midX) }
+            }
         }
     }
     func testCodexCLIUsesItsLaunchingApp() {
@@ -139,7 +143,7 @@ final class SpeechControllerTests: XCTestCase {
         XCTAssertEqual(pill.alphaValue, 0.55, accuracy: 0.02)
     }
 
-    func testSessionStartKeepsPillDimUntilFinalResponse() throws {
+    func testIdleCodexSessionStartLightsBeforeFirstPrompt() throws {
         let pet = PetWindow()
         let speech = SpeechController(pet: pet)
 
@@ -148,7 +152,7 @@ final class SpeechControllerTests: XCTestCase {
         RunLoop.main.run(until: Date().addingTimeInterval(0.3))
 
         let pill = try XCTUnwrap(pet.childWindows?.first as? PillWindow)
-        XCTAssertEqual(pill.alphaValue, 0.55, accuracy: 0.02)
+        XCTAssertEqual(pill.alphaValue, 1.0, accuracy: 0.02)
     }
 
     func testUserPromptSubmitDimsAndStopRelightsPill() throws {
@@ -195,8 +199,7 @@ final class SpeechControllerTests: XCTestCase {
 
     func testClaudeSessionStartLightsPill() throws {
         // Clearing a Claude chat fires SessionStart — the session is parked on
-        // your first prompt, so its pill should light. (Codex SessionStart stays
-        // dim; see testSessionStartKeepsPillDimUntilFinalResponse.)
+        // your first prompt, so its pill should light, like an idle Codex CLI.
         let pet = PetWindow()
         let speech = SpeechController(pet: pet)
 
@@ -235,7 +238,7 @@ final class SpeechControllerTests: XCTestCase {
             .appendingPathComponent("clawdex-abort-\(UUID().uuidString).jsonl")
         defer { try? FileManager.default.removeItem(at: transcript) }
 
-        try #"{"type":"response_item","payload":{"type":"message","role":"user"}}"#
+        try (#"{"type":"response_item","payload":{"type":"message","role":"user"}}"# + "\n")
             .write(to: transcript, atomically: true, encoding: .utf8)
 
         speech.handle(event: "UserPromptSubmit", narration: "thinking...",
@@ -258,6 +261,10 @@ final class SpeechControllerTests: XCTestCase {
         RunLoop.main.run(until: Date().addingTimeInterval(0.8))
 
         XCTAssertEqual(pill.alphaValue, 1.0, accuracy: 0.02)
+        speech.handle(event: "UserPromptSubmit", narration: nil, transcriptPath: transcript.path,
+                      source: "app", root: "/tmp/app", agent: "codex")
+        RunLoop.main.run(until: Date().addingTimeInterval(0.8))
+        XCTAssertEqual(pill.alphaValue, 0.55, accuracy: 0.02)
     }
 
     func testStopFailureRelightsClaudePill() throws {

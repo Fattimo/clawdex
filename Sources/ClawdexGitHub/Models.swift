@@ -79,6 +79,8 @@ public struct GitHubPR: Codable, Equatable {
     public var reviewDecision: String?
     public var statusCheckRollup: [GitHubCheck]?
     public var updatedAt: String?
+    public var createdAt: String?
+    public var unresolvedReviewCount: Int?
     public var health: PRHealth {
         if state == "MERGED" { return .merged }
         if state == "CLOSED" { return .closed }
@@ -117,6 +119,16 @@ public struct StackDefinition: Codable, Equatable {
 public struct GitHubStack: Codable, Equatable {
     public var definition: StackDefinition
     public var pullRequests: [GitHubPR]
+    /// The next unmerged PR nearest the base branch, in dependency order.
+    public var bottomPR: GitHubPR? {
+        definition.numbers.lazy.compactMap { number in
+            pullRequests.first { $0.number == number && $0.state == "OPEN" }
+        }.first
+    }
+    public var bottomPosition: Int? {
+        guard let pr = bottomPR, let index = definition.numbers.firstIndex(of: pr.number) else { return nil }
+        return index + 1
+    }
     public var missing: [Int] { definition.numbers.filter { n in !pullRequests.contains { $0.number == n } } }
     public var merged: Bool { missing.isEmpty && !pullRequests.isEmpty && pullRequests.allSatisfy { $0.health == .merged } }
     public var ready: Bool {

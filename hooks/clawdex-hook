@@ -68,6 +68,9 @@ find_root() {
 EVENT="$(json_get hook_event_name)"
 TOOL="$(json_get tool_name)"
 TRANSCRIPT="$(json_get transcript_path)"
+SESSION_ID="$(json_get session_id)"
+TURN_ID="$(json_get turn_id)"
+SESSION_SOURCE="$(json_get source)"
 # Set when the event fires inside a Claude Code subagent (its tool calls, and
 # SubagentStart/Stop). transcript_path is still the PARENT session's, so the
 # daemon folds the subagent into that session's pill instead of giving it one.
@@ -212,9 +215,12 @@ KITTY_WIN_ESC="$(json_escape "$KITTY_WIN")"
 KITTY_PID_ESC="$(json_escape "$KITTY_PID_")"
 KITTY_SOCK_ESC="$(json_escape "$KITTY_SOCK")"
 SUBAGENT_ESC="$(json_escape "$SUBAGENT")"
+SESSION_ID_ESC="$(json_escape "$SESSION_ID")"
+TURN_ID_ESC="$(json_escape "$TURN_ID")"
+SESSION_SOURCE_ESC="$(json_escape "$SESSION_SOURCE")"
 AGENT="$(json_escape "$AGENT")"
 TOOL="$(json_escape "$TOOL")"
-MSG="{\"event\":\"$EVENT\",\"agent\":\"$AGENT\",\"tool\":\"$TOOL\",\"row\":$ROW,\"mode\":\"$MODE\",\"ttl\":$TTL,\"text\":\"$TEXT\",\"transcript\":\"$TRANSCRIPT_ESC\",\"source\":\"$SOURCE_ESC\",\"root\":\"$ROOT_ESC\",\"app\":\"$APP_ESC\",\"kitty_window\":\"$KITTY_WIN_ESC\",\"kitty_pid\":\"$KITTY_PID_ESC\",\"kitty_sock\":\"$KITTY_SOCK_ESC\",\"subagent\":\"$SUBAGENT_ESC\",\"ts\":$TS}"
+MSG="{\"event\":\"$EVENT\",\"agent\":\"$AGENT\",\"tool\":\"$TOOL\",\"row\":$ROW,\"mode\":\"$MODE\",\"ttl\":$TTL,\"text\":\"$TEXT\",\"transcript\":\"$TRANSCRIPT_ESC\",\"source\":\"$SOURCE_ESC\",\"root\":\"$ROOT_ESC\",\"app\":\"$APP_ESC\",\"kitty_window\":\"$KITTY_WIN_ESC\",\"kitty_pid\":\"$KITTY_PID_ESC\",\"kitty_sock\":\"$KITTY_SOCK_ESC\",\"subagent\":\"$SUBAGENT_ESC\",\"session_id\":\"$SESSION_ID_ESC\",\"turn_id\":\"$TURN_ID_ESC\",\"session_source\":\"$SESSION_SOURCE_ESC\",\"ts\":$TS}"
 
 # Best-effort send. If the daemon isn't running, exit silently. Use a short
 # timeout via the OS rather than nc flags (varies between BSD nc and ncat).

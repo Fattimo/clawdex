@@ -121,6 +121,13 @@ class CodexHooksTests(unittest.TestCase):
             data = self.event(name)
             self.assertEqual((data["event"], data["row"], data["mode"]), (name, 0, "release"))
 
+    def test_session_identity_and_resume_source_survive_translation(self):
+        data = self.event("SessionStart", session_id='session-"quoted"', source="resume", turn_id="turn-123")
+        self.assertEqual(data["session_id"], 'session-"quoted"')
+        self.assertEqual(data["session_source"], "resume")
+        self.assertEqual(data["turn_id"], "turn-123")
+        self.assertEqual(data["source"], self.home.name)
+
     def test_claude_still_uses_original_mapping(self):
         data = self.event("PreToolUse", agent="claude", tool_name="Read",
                           tool_input={"file_path": "/tmp/example.swift"})

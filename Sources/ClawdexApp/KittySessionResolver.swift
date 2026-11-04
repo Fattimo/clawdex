@@ -3,7 +3,66 @@ import Foundation
 /// Codex's shared server can inherit KITTY_WINDOW_ID from a different CLI.
 /// Locate the actual foreground client instead of trusting that inherited ID.
 enum KittySessionResolver {
-    static func codexWindow(in data: Data, root: String) -> String? {
+    struct Client: Equatable {
+        var window: String
+        var processID: Int
+        var agent: String
+        var root: String
+        var identity: String { window + ":" + String(processID) }
+    }
+
+    /// Local client presence exists before Codex sends its first hook.
+    static func clients(in data: Data) -> [Client]? {
+        guard let windows = windows(in: data) else { return nil }
+        var result: [Client] = []
+        for window in windows {
+            guard let id = window["id"] as? Int, id > 0 else { continue }
+            for process in window["foreground_processes"] as? [[String: Any]] ?? [] {
+                guard let pid = process["pid"] as? Int, pid > 0,
+                      let command = process["cmdline"] as? [String], let executable = command.first,
+                      let cwd = process["cwd"] as? String, cwd.hasPrefix("/"), cwd != "/" else { continue }
+                let agent = (executable as NSString).lastPathComponent
+                guard ["claude", "codex"].contains(agent),
+                      !command.dropFirst().contains(where: { ["app-server", "exec", "mcp-server", "--print", "-p"].contains($0) }) else { continue }
+                result.append(Client(window: String(id), processID: pid, agent: agent, root: projectRoot(cwd)))
+            }
+        }
+        return Array(Set(result.map(\.identity))).compactMap { id in result.first { $0.identity == id } }
+            .sorted { $0.identity < $1.identity }
+    }
+
+    static func projectRoot(_ path: String) -> String {
+        var directory = URL(fileURLWithPath: canonical(path))
+        while directory.path != "/" {
+            if FileManager.default.fileExists(atPath: directory.appendingPathComponent(".git").path) { return directory.path }
+            directory.deleteLastPathComponent()
+        }
+        return canonical(path)
+    }
+
+    /// Worktrees share a common Git directory, but unrelated clones do not.
+    static func repositoryIdentity(_ root: String) -> String? {
+        func smallText(_ url: URL) -> String? {
+            guard let file = try? FileHandle(forReadingFrom: url) else { return nil }
+            defer { try? file.close() }
+            guard let data = try? file.read(upToCount: 4097), data.count <= 4096 else { return nil }
+            return String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        let entry = URL(fileURLWithPath: canonical(root)).appendingPathComponent(".git")
+        var directory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: entry.path, isDirectory: &directory) else { return nil }
+        var git = entry
+        if !directory.boolValue {
+            guard let value = smallText(entry), value.hasPrefix("gitdir: ") else { return nil }
+            git = URL(fileURLWithPath: String(value.dropFirst(8)), relativeTo: entry.deletingLastPathComponent()).standardizedFileURL
+        }
+        if let common = smallText(git.appendingPathComponent("commondir")), !common.isEmpty {
+            git = URL(fileURLWithPath: common, relativeTo: URL(fileURLWithPath: git.path, isDirectory: true)).standardizedFileURL
+        }
+        return canonical(git.path)
+    }
+
+    static func codexWindow(in data: Data, root: String, clientPID: Int? = nil) -> String? {
         guard root.hasPrefix("/"), root != "/",
               let windows = windows(in: data) else { return nil }
         let root = canonical(root)
@@ -12,6 +71,7 @@ enum KittySessionResolver {
             guard let id = window["id"] as? Int, id > 0,
                   let processes = window["foreground_processes"] as? [[String: Any]] else { continue }
             for process in processes {
+                if let clientPID, process["pid"] as? Int != clientPID { continue }
                 guard let command = process["cmdline"] as? [String],
                       let executable = command.first,
                       (executable as NSString).lastPathComponent == "codex",

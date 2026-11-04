@@ -65,4 +65,28 @@ final class KittySessionResolverTests: XCTestCase {
         ]]])
         XCTAssertNil(KittySessionResolver.codexWindow(in: data, root: "/tmp/app"))
     }
+
+    func testClientDiscoveryIncludesIdleResumeClientsAndExcludesServers() throws {
+        let data = try listing([["id": 7, "foreground_processes": [
+            ["pid": 101, "cmdline": ["/opt/bin/codex", "resume", "thread-id"], "cwd": "/tmp/project"],
+            ["pid": 102, "cmdline": ["codex", "app-server"], "cwd": "/tmp/server"],
+            ["pid": 103, "cmdline": ["codex", "exec", "hello"], "cwd": "/tmp/headless"],
+            ["pid": 104, "cmdline": ["node", "mcp-server"], "cwd": "/tmp/mcp"]
+        ]]])
+        let clients = try XCTUnwrap(KittySessionResolver.clients(in: data))
+        XCTAssertEqual(clients.count, 1)
+        XCTAssertEqual(clients.first?.processID, 101)
+        XCTAssertEqual(clients.first?.window, "7")
+        XCTAssertNil(KittySessionResolver.clients(in: Data("bad JSON".utf8)))
+    }
+
+    func testObservedProcessIdentityDisambiguatesSharedRepoClients() throws {
+        let data = try listing([
+            ["id": 6, "foreground_processes": [["pid": 101, "cmdline": ["codex"], "cwd": "/tmp/project"]]],
+            ["id": 7, "foreground_processes": [["pid": 102, "cmdline": ["codex", "resume"], "cwd": "/tmp/project"]]]
+        ])
+        XCTAssertNil(KittySessionResolver.codexWindow(in: data, root: "/tmp/project"))
+        XCTAssertEqual(KittySessionResolver.codexWindow(in: data, root: "/tmp/project", clientPID: 102), "7")
+        XCTAssertNil(KittySessionResolver.codexWindow(in: data, root: "/tmp/project", clientPID: 999))
+    }
 }

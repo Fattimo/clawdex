@@ -45,7 +45,7 @@ public enum ToolProcess {
 }
 
 public struct GitHubClient {
-    public static let fields = "number,title,headRefName,baseRefName,headRefOid,state,isDraft,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup,updatedAt"
+    public static let fields = "number,title,headRefName,baseRefName,headRefOid,state,isDraft,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup,updatedAt,createdAt"
     public init() {}
     public func login() throws -> String {
         let data = try ToolProcess.run("gh", ["api", "user", "--jq", ".login"])
@@ -76,7 +76,37 @@ public struct GitHubClient {
         var result = GitHubRepositoryState(repository: repository)
         result.pullRequests = prs
         result.stacks = StackDiscovery.discover(repository: repository, prs: prs, previous: previous.stacks, manual: manual)
+        // Only the represented bottom PR of each visible chain needs review
+        // metadata. This stays inside webhook-driven refreshes, not a poll.
+        let visible = GitHubBoardSelection.recentStacks(result.stacks.map { definition in
+            GitHubStack(definition: definition, pullRequests: prs.filter { definition.numbers.contains($0.number) })
+        })
+        for number in Set(visible.compactMap { $0.bottomPR?.number }) {
+            guard let index = result.pullRequests.firstIndex(where: { $0.number == number }) else { continue }
+            result.pullRequests[index].unresolvedReviewCount = try? unresolvedReviewCount(PRReference(repository: repository, number: number))
+        }
         result.updatedAt = Date(); return result
+    }
+    private func unresolvedReviewCount(_ reference: PRReference) throws -> Int {
+        let parts = reference.repository.split(separator: "/").map(String.init)
+        let query = """
+        query($owner: String!, $name: String!, $number: Int!, $cursor: String) {
+          repository(owner: $owner, name: $name) {
+            pullRequest(number: $number) {
+              reviewThreads(first: 100, after: $cursor) {
+                nodes { id isResolved }
+                pageInfo { hasNextPage endCursor }
+              }
+            }
+          }
+        }
+        """
+        return try ReviewThreadCounter.count { cursor in
+            let variables: [String: Any] = ["owner": parts[0], "name": parts[1], "number": reference.number,
+                                            "cursor": cursor as Any? ?? NSNull()]
+            let input = try JSONSerialization.data(withJSONObject: ["query": query, "variables": variables])
+            return try ToolProcess.run("gh", ["api", "graphql", "--input", "-"], input: input)
+        }
     }
     public func installWebhook(repository: String, endpoint: String, secret: String, knownID: Int? = nil, createIfMissing: Bool = true) throws -> Int {
         guard PRReference.validRepository(repository), let base = PRReference.publicEndpoint(endpoint) else { throw GitHubError.message("Invalid webhook endpoint or repository") }
@@ -86,7 +116,7 @@ public struct GitHubClient {
         let id = Self.webhookID(in: pages.flatMap { $0 }, knownID: knownID, url: url)
         guard id != nil || createIfMissing else { throw GitHubError.message("The stored webhook is missing. Run clawdex github hook \(repository) again.") }
         var body: [String: Any] = ["active": true,
-            "events": ["pull_request", "pull_request_review", "pull_request_review_thread", "check_run", "check_suite", "status", "push", "merge_group", "branch_protection_rule", "repository_ruleset"],
+            "events": ["pull_request", "pull_request_review", "pull_request_review_thread", "pull_request_review_comment", "check_run", "check_suite", "status", "push", "merge_group", "branch_protection_rule", "repository_ruleset"],
             "config": ["url": url, "content_type": "json", "secret": secret, "insecure_ssl": "0"]]
         if id == nil { body["name"] = "web" }
         let path = "repos/\(repository)/hooks" + id.map { "/\($0)" }.orEmpty
@@ -97,6 +127,46 @@ public struct GitHubClient {
     static func webhookID(in hooks: [[String: Any]], knownID: Int?, url: String) -> Int? {
         if let knownID { return hooks.first { $0["id"] as? Int == knownID }?["id"] as? Int }
         return hooks.first { ($0["config"] as? [String: Any])?["url"] as? String == url }?["id"] as? Int
+    }
+}
+
+enum ReviewThreadCounter {
+    private struct Envelope: Decodable {
+        struct Payload: Decodable {
+            struct Repository: Decodable {
+                struct PullRequest: Decodable {
+                    struct Connection: Decodable {
+                        struct Thread: Decodable { let id: String; let isResolved: Bool }
+                        struct PageInfo: Decodable { let hasNextPage: Bool; let endCursor: String? }
+                        let nodes: [Thread]; let pageInfo: PageInfo
+                    }
+                    let reviewThreads: Connection
+                }
+                let pullRequest: PullRequest?
+            }
+            let repository: Repository?
+        }
+        struct Failure: Decodable { let message: String }
+        let data: Payload?
+        let errors: [Failure]?
+    }
+    static func count(fetch: (String?) throws -> Data) throws -> Int {
+        var cursor: String?
+        var seen = Set<String>(), threads: [String: Bool] = [:]
+        for _ in 0..<20 {
+            let envelope = try JSONDecoder().decode(Envelope.self, from: fetch(cursor))
+            guard envelope.errors?.isEmpty != false,
+                  let page = envelope.data?.repository?.pullRequest?.reviewThreads else {
+                throw GitHubError.message("Review conversations unavailable")
+            }
+            for thread in page.nodes { threads[thread.id] = thread.isResolved }
+            if !page.pageInfo.hasNextPage { return threads.values.filter { !$0 }.count }
+            guard let next = page.pageInfo.endCursor, !next.isEmpty, seen.insert(next).inserted else {
+                throw GitHubError.message("Review conversation pagination incomplete")
+            }
+            cursor = next
+        }
+        throw GitHubError.message("Review conversation pagination limit reached")
     }
 }
 

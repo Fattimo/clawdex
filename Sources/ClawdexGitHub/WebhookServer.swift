@@ -57,7 +57,7 @@ public enum WebhookSecurity {
         let known = snapshot.repositories.first { $0.repository == name }?.pullRequests ?? []
         let prs = Set(known.map(\.number)); let shas = Set(known.filter { $0.state == "OPEN" }.map(\.headRefOid))
         switch event {
-        case "pull_request", "pull_request_review", "pull_request_review_thread":
+        case "pull_request", "pull_request_review", "pull_request_review_thread", "pull_request_review_comment":
             guard let pr = object["pull_request"] as? [String: Any], let number = pr["number"] as? Int else { return nil }
             let author = (pr["user"] as? [String: Any])?["login"] as? String
             return prs.contains(number) || author?.lowercased() == config.login.lowercased() ? name : nil

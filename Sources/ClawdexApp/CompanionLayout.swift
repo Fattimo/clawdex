@@ -16,11 +16,13 @@ enum CompanionLayout {
                       y: pet.minY - floorGap - floorHeight,
                       width: width * 3 + columnGap * 2, height: floorHeight)
     }
-    static func sessionFrame(index: Int, pet: NSRect) -> NSRect {
+    static func sessionFrame(index: Int, pet: NSRect, onLeft: Bool? = nil) -> NSRect {
         let width = dogWidth(pet)
-        let x = index.isMultiple(of: 2) ? pet.minX + artInset - columnGap - width
+        let left = onLeft ?? index.isMultiple(of: 2)
+        let row = onLeft == nil ? index / 2 : index
+        let x = left ? pet.minX + artInset - columnGap - width
                                       : pet.maxX - artInset + columnGap
-        return NSRect(x: x, y: pet.minY + 10 + CGFloat(index / 2) * (PillWindow.height + rowGap),
+        return NSRect(x: x, y: pet.minY + 10 + CGFloat(row) * (PillWindow.height + rowGap),
                       width: width, height: PillWindow.height)
     }
     static func constrainedPet(_ pet: NSRect, screen: NSRect, sides: CGFloat, bottom: CGFloat, top: CGFloat = 0) -> NSRect {

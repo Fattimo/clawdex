@@ -34,13 +34,22 @@ To enable it after updating this checkout:
 
 1. Run `./install.sh` to build and install the updated integration.
 2. Launch Codex CLI and open `/hooks` to review and trust the clawdex hooks. Changed definitions need another review. See the [official hook documentation](https://learn.chatgpt.com/docs/hooks).
-3. Run `clawdex wake` and send a prompt in Codex.
+3. Run `clawdex wake`. In kitty, interactive clients register automatically before their first prompt; other terminals register through hooks.
 
-Codex sessions get their own switchboard pill, bubble, and accent color (`repo ·cdx`), keeping Claude and Codex in the same repo distinct. Shell commands animate as work, `apply_patch` narrates editing, and `update_plan` shows reviewing. Interrupting a turn returns the pet to idle and lights the pill; closing the CLI removes its pill. Clicking a CLI pill returns to its launching terminal or editor; kitty can focus the exact tab when remote control is configured. Other terminals are brought to the front. Desktop Codex sessions retain their thread deep links.
+Codex sessions get their own switchboard pill, bubble, and accent color, keeping Claude and Codex in the same repo distinct. Labels use the bare project name; side and color identify the agent. Shell commands animate as work, `apply_patch` narrates editing, and `update_plan` shows reviewing. Interrupting a turn returns the pet to idle and lights the pill; closing the CLI removes its pill. Clicking a CLI pill returns to its launching terminal or editor; kitty can focus the exact tab when remote control is configured. Other terminals are brought to the front. Desktop Codex sessions retain their thread deep links.
+
+Claude Code switches stay on the dog's left in warm colors; Codex switches stay
+on the right in cool colors. Bubbles and kitty tabs share each session's accent.
+Idle Codex startup and a current-turn Stop light the switch; prompt/tool activity
+and structured turn starts dim it. Structured completion records also confirm
+readiness; quoted interruption markers in tool output never count as completion.
+Session and turn IDs prevent stale terminal events from
+changing a newer turn. Internal worktrees stay attached to their original
+client's switchboard entry and kitty tab.
 
 Verify events with `tail -f ~/.clawdex/hook-trail.log` — look for `"agent":"codex"`. If nothing arrives, check `/hooks` for disabled or untrusted hooks and ensure hooks are enabled in your Codex configuration. The shared hook script uses `jq` for structured payload parsing when available, with a basic shell parser as a fallback.
 
-For kitty, enable `allow_remote_control socket-only` and `listen_on unix:${TMPDIR}/kitty` in `kitty.conf`, then restart kitty if these settings are new. Clawdex mirrors readiness onto the session's tab with a `●`/`○` marker and accent color. Codex can share a server across CLI clients, so its hook's inherited window ID may belong to another tab. Clawdex uses kitty's foreground Codex process and project directory to find the actual client, including one launched from a parent directory such as `projects`. If several Codex clients run in the same project, the mapping is ambiguous; clawdex leaves their tabs unchanged rather than choosing one. Failed updates retry on later events.
+For kitty, enable `allow_remote_control socket-only` and `listen_on unix:${TMPDIR}/kitty` in `kitty.conf`, then restart kitty if these settings are new. Clawdex mirrors readiness onto the session's tab with a `●`/`○` marker and accent color. A local presence check every three seconds registers idle/new/resumed clients without a prompt and removes exited clients. It preserves hook readiness and manually dismissed entries. Codex can share a server across CLI clients, so its hook's inherited window ID may belong to another tab. Clawdex uses kitty's foreground client process, project root, and observed process identity to focus and color the actual tab. If multiple clients in the same project cannot be distinguished, it leaves their tabs unchanged. Failed updates retry on the next presence check or hook.
 
 ## Install
 
@@ -112,9 +121,18 @@ Clawdex can watch your PR chains in a compact scorebug below the dog. It
 discovers your open PRs by repository and groups branches whose base points to
 another PR's head. Cached chain membership survives parent merges and GitHub
 retargeting. Single PRs get their own entry; explicit chains can also be named.
-The scorebug uses one opaque neutral strip, 38 points tall, with the chain name
-above its status. It sits 4 points below the dog and spans the dog
-and both session columns. Session switches alternate evenly on either side,
+The scorebug uses one opaque neutral card, 38 points tall, with a vertically
+centered status dot on the left: green when the entire stack is ready, yellow
+while CI is pending, red if an open stack member has failed CI, and gray for
+drafts and other states. Failed CI takes priority over pending checks.
+Its first row gives the bottom open PR's number and title the full width.
+The subtitle shows time since its last update and the date it opened, with
+stack position and a numeric review conversation count plus comment icon on
+the right.
+Unavailable review counts show a dash rather than zero. One stack stays one
+card; merged parents advance the represented PR to the next unmerged member.
+It sits 4 points below the dog and spans the dog
+and both session columns. Claude Code switches stack on the left and Codex on the right,
 each as wide as the dog; the latest chat update appears centered above it.
 The strip shows chains represented by the four most recently
 updated open PRs (provisionally using GitHub's `updatedAt`, pending a refined
@@ -131,7 +149,9 @@ starts and supervises ngrok when GitHub tracking is enabled; it already starts
 at login through launchd. No separate hosted backend or regular GitHub polling
 is used. Initial startup, wake, manual refresh and relevant signed webhooks
 refresh data. Ngrok reconnects use bounded backoff, and wake/reconnect triggers
-a catch-up refresh.
+a catch-up refresh. Before system sleep, Clawdex stops ngrok and the local
+webhook receiver and cancels reconnect attempts. On wake, it restarts the
+connection and refreshes PR state to catch up on missed deliveries.
 
 ```bash
 clawdex github setup owner/repo

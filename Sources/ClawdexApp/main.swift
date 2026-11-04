@@ -18,6 +18,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var githubConfig: GitHubConfig?
     private var githubSnapshot = GitHubSnapshot()
     private var wakeObserver: NSObjectProtocol?
+    private var sleepObserver: NSObjectProtocol?
+    private var githubSuspended = false
     private var terminationSignals: [DispatchSourceSignal] = []
     private var githubGeneration = UUID()
     private var config = ClawdexConfig()
@@ -58,7 +60,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         speech.onPillLayout = { [weak self] in self?.githubBoard.anchor() }
         githubBoard.onNotice = { [weak self] message, onOpen in self?.speech.announceGitHub(message, onOpen: onOpen) }
         reloadGitHub()
-        wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in self?.github?.refresh(reconnect: true) }
+        sleepObserver = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.suspendForSleep()
+        }
+        wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
+            guard let self else { return }
+            self.githubSuspended = false
+            self.reloadGitHub()
+            self.speech.startKittyObservation()
+        }
         window.onSettings = { [weak self] view, rect in
             guard let self else { return }
             self.settingsPopover.show(from: view, rect: rect, config: self.config)
@@ -89,6 +99,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         window.wake()
+        speech.startKittyObservation()
         // Hello on first launch — routed through the state machine so it
         // properly returns to idle after the wave cycle. Direct setRow calls
         // would bypass the machine and leave us stuck.
@@ -98,7 +109,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         server?.stop()
         github?.stop()
+        speech?.stopKittyObservation()
         if let wakeObserver { NSWorkspace.shared.notificationCenter.removeObserver(wakeObserver) }
+        if let sleepObserver { NSWorkspace.shared.notificationCenter.removeObserver(sleepObserver) }
     }
 
     /// CLI commands are sent as JSON over the same socket as hook events. We
@@ -138,7 +151,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                           subagent: s.subagent,
                           kitty: SpeechController.KittyTarget(
                               window: s.kitty_window ?? "", pid: s.kitty_pid ?? "",
-                              sock: s.kitty_sock ?? ""))
+                              sock: s.kitty_sock ?? ""),
+                          sessionID: s.session_id ?? "", sessionSource: s.session_source ?? "", turnID: s.turn_id ?? "")
         }
 
         machine.ingest(line)
@@ -157,6 +171,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let kitty_pid: String?
         let kitty_sock: String?     // KITTY_LISTEN_ON, if kitty set it
         let subagent: String?       // Claude Code agent_id, inside a subagent
+        let session_id: String?
+        let session_source: String?
+        let turn_id: String?
     }
 
     private func saveConfig() {
@@ -172,7 +189,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         github?.stop(); github = nil
         githubConfig = try? GitHubStore.loadConfig(); githubSnapshot = GitHubStore.loadSnapshot()
         githubBoard.update(config: githubConfig, snapshot: githubSnapshot, visible: config.showGitHubSwitchboard)
-        guard let config = githubConfig, config.enabled else { return }
+        guard !githubSuspended, let config = githubConfig, config.enabled else { return }
         let service = GitHubService(config: config) { [weak self] state in
             guard let self, self.githubGeneration == generation else { return }; self.githubSnapshot = state
             self.githubBoard.update(config: self.githubConfig, snapshot: state, visible: self.config.showGitHubSwitchboard)
@@ -180,8 +197,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         github = service; service.start()
     }
     private func refreshGitHub() {
+        guard !githubSuspended else { return }
         if !githubSnapshot.receiverReady { reloadGitHub() }
         else { github?.refresh(reconnect: githubSnapshot.tunnelURL == nil) }
+    }
+
+    private func suspendForSleep() {
+        githubSuspended = true; githubGeneration = UUID()
+        github?.stop(); github = nil
+        githubSnapshot.receiverReady = false; githubSnapshot.tunnelURL = nil
+        githubSnapshot.tunnelError = "Paused while this Mac sleeps"
+        githubBoard.update(config: githubConfig, snapshot: githubSnapshot, visible: config.showGitHubSwitchboard)
+        speech.stopKittyObservation()
     }
 }
 

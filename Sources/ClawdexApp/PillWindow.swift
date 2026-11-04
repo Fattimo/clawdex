@@ -183,10 +183,8 @@ final class PillView: NSView {
         // Capsule fill: bright neutral + accent wash when lit; flatter and
         // greyer when dim so the pill reads as switched-off.
         Self.baseFill(lit: lit, dark: dark).setFill(); path.fill()
-        if lit {
-            accent.withAlphaComponent(dark ? 0.30 : 0.16).setFill()
-            path.fill()
-        }
+        accent.withAlphaComponent(lit ? (dark ? 0.30 : 0.16) : (dark ? 0.12 : 0.07)).setFill()
+        path.fill()
 
         // Border: accent + thicker when lit, faint hairline when dim.
         (lit ? accent.withAlphaComponent(0.9) : NSColor.separatorColor.withAlphaComponent(0.5)).setStroke()
@@ -202,7 +200,7 @@ final class PillView: NSView {
         if lit {
             accent.setFill(); dot.fill()
         } else {
-            NSColor.tertiaryLabelColor.setStroke()
+            accent.withAlphaComponent(0.6).setStroke()
             dot.lineWidth = 1.5
             dot.stroke()
         }

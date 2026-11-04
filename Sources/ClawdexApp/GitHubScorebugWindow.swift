@@ -1,17 +1,64 @@
 import AppKit
 import QuartzCore
 
+enum GitHubScorebugTone: Equatable {
+    case ready, pending, failed, neutral
+    func fill(dark: Bool) -> NSColor {
+        NSColor(white: dark ? 0.17 : 0.79, alpha: 1)
+    }
+    func indicator(dark: Bool) -> NSColor {
+        switch self {
+        case .ready: return dark ? NSColor(calibratedRed: 0.27, green: 0.79, blue: 0.43, alpha: 1)
+                                 : NSColor(calibratedRed: 0.12, green: 0.49, blue: 0.25, alpha: 1)
+        case .pending: return dark ? NSColor(calibratedRed: 0.96, green: 0.77, blue: 0.20, alpha: 1)
+                                   : NSColor(calibratedRed: 0.71, green: 0.48, blue: 0.02, alpha: 1)
+        case .failed: return dark ? NSColor(calibratedRed: 0.97, green: 0.37, blue: 0.33, alpha: 1)
+                                  : NSColor(calibratedRed: 0.80, green: 0.18, blue: 0.15, alpha: 1)
+        case .neutral: return NSColor(white: dark ? 0.56 : 0.43, alpha: 1)
+        }
+    }
+}
+
 /// A two-line broadcast-style ticker, cycling through recent GitHub chains.
 final class GitHubScorebugWindow: NSPanel {
     struct Item {
         var id: String
         var title: String
-        var glyph: String
         var status: String
-        var compactStatus: String? = nil
+        var number: Int? = nil
+        var stackPosition: String? = nil
+        var unresolvedReviewCount: Int? = nil
+        var createdAt: Date? = nil
+        var updatedAt: Date? = nil
+        var tone: GitHubScorebugTone = .neutral
+
+        var headline: String {
+            (number.map { "#\($0) · " } ?? "") + title
+        }
+        var reviewText: String {
+            guard let count = unresolvedReviewCount, count >= 0 else { return "— unresolved" }
+            return "\(count) unresolved"
+        }
+        func metadata(now: Date = Date()) -> String {
+            let relative: String
+            if let updatedAt {
+                let seconds = max(0, now.timeIntervalSince(updatedAt))
+                if seconds < 60 { relative = "just now" }
+                else if seconds < 3600 { relative = "\(Int(seconds / 60))m ago" }
+                else if seconds < 86400 { relative = "\(Int(seconds / 3600))h ago" }
+                else { relative = "\(Int(seconds / 86400))d ago" }
+            } else { relative = "—" }
+            let opened: String
+            if let createdAt {
+                let formatter = DateFormatter()
+                formatter.dateFormat = Calendar.current.component(.year, from: createdAt) == Calendar.current.component(.year, from: now) ? "MMM d" : "MMM d, yyyy"
+                opened = formatter.string(from: createdAt)
+            } else { opened = "—" }
+            return "Updated \(relative) · opened \(opened)"
+        }
     }
     private let floor = ScorebugView()
-    let button = NSButton()
+    let button = GitHubScorebugButton()
     private(set) var items: [Item] = []
     private(set) var currentIndex = 0
     var currentItem: Item? { items.indices.contains(currentIndex) ? items[currentIndex] : nil }
@@ -43,11 +90,12 @@ final class GitHubScorebugWindow: NSPanel {
 
     func setItems(_ items: [Item]) {
         let previous = currentItem?.id
+        let previousCount = self.items.count
         self.items = Array(items.prefix(4))
         currentIndex = self.items.firstIndex { $0.id == previous } ?? 0
         render(animated: false)
         // Webhook refreshes must not restart the dwell and starve the carousel.
-        if currentItem?.id != previous || self.items.count < 2 || timer == nil { restartTimer() }
+        if currentItem?.id != previous || (previousCount > 1) != (self.items.count > 1) || timer == nil { restartTimer() }
     }
     override func orderFrontRegardless() { super.orderFrontRegardless(); if timer == nil { restartTimer() } }
     override func orderOut(_ sender: Any?) { stopTimer(); super.orderOut(sender) }
@@ -61,14 +109,19 @@ final class GitHubScorebugWindow: NSPanel {
     private func stopTimer() { timer?.invalidate(); timer = nil }
     private func restartTimer() {
         stopTimer()
-        guard isVisible, !paused, items.count > 1 else { return }
-        let timer = Timer(timeInterval: rotationInterval, repeats: true) { [weak self] _ in self?.advance() }
-        timer.tolerance = min(0.5, rotationInterval / 10)
+        guard isVisible, !paused, !items.isEmpty else { return }
+        let interval = items.count > 1 ? rotationInterval : 60
+        let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            if self.items.count > 1 { self.advance() } else { self.render(animated: false) }
+        }
+        timer.tolerance = min(0.5, interval / 10)
         RunLoop.main.add(timer, forMode: .common); self.timer = timer
     }
     private func render(animated: Bool) {
         guard let item = currentItem else {
             button.attributedTitle = NSAttributedString(string: "")
+            button.item = nil
             button.isEnabled = false; button.toolTip = nil; return
         }
         button.isEnabled = true
@@ -78,26 +131,72 @@ final class GitHubScorebugWindow: NSPanel {
             transition.duration = 0.3
             button.layer?.add(transition, forKey: "rotate")
         }
-        let paragraph = NSMutableParagraphStyle()
-        paragraph.alignment = .center; paragraph.lineBreakMode = .byTruncatingTail
-        let title = NSMutableAttributedString(string: item.title + "\n", attributes: [
-            .font: NSFont.systemFont(ofSize: 11, weight: .medium),
-            .foregroundColor: NSColor.labelColor, .paragraphStyle: paragraph
-        ])
-        let position = items.count > 1 ? "  ·  \(currentIndex + 1)/\(items.count)" : ""
-        title.append(NSAttributedString(string: "\(item.glyph) \(item.compactStatus ?? item.status)\(position)", attributes: [
-            .font: NSFont.systemFont(ofSize: 11),
-            .foregroundColor: NSColor.secondaryLabelColor, .paragraphStyle: paragraph
-        ]))
-        button.attributedTitle = title
-        button.toolTip = "\(item.title) · \(item.status) · Open on GitHub"
-        button.setAccessibilityLabel("GitHub: \(item.title), \(item.status), \(currentIndex + 1) of \(items.count). Open PR on GitHub.")
-        floor.needsLayout = true
+        button.item = item
+        button.attributedTitle = NSAttributedString(string: item.headline + "\n" + item.metadata())
+        let position = item.stackPosition.map { " · stack \($0)" } ?? ""
+        button.toolTip = "\(item.headline)\(position) · \(item.status) · \(item.reviewText) review conversations · \(item.metadata()) · Open on GitHub"
+        button.setAccessibilityLabel("GitHub: \(item.headline)\(position), \(item.status), \(item.reviewText) review conversations, \(item.metadata()). Open PR on GitHub.")
+        floor.tone = item.tone
+        floor.needsLayout = true; floor.needsDisplay = true
     }
     @objc private func selected() { if let item = currentItem { onSelect?(item.id) } }
 }
 
+/// One native click target with independently laid-out text so a long title
+/// never crowds out the stack position or unresolved review count.
+final class GitHubScorebugButton: NSButton {
+    private let commentIcon = ScorebugCommentIcon()
+    var item: GitHubScorebugWindow.Item? { didSet { commentIcon.isHidden = item == nil; needsDisplay = true; needsLayout = true } }
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        commentIcon.image = NSImage(systemSymbolName: "text.bubble", accessibilityDescription: nil)
+        commentIcon.contentTintColor = .secondaryLabelColor
+        addSubview(commentIcon)
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+    override func layout() {
+        super.layout()
+        commentIcon.frame = NSRect(x: bounds.maxX - 13, y: isFlipped ? bounds.maxY - 14 : 3, width: 12, height: 12)
+    }
+    override func draw(_ dirtyRect: NSRect) {
+        guard let item else { return }
+        let font = NSFont.systemFont(ofSize: 11, weight: .medium)
+        let secondaryFont = NSFont.systemFont(ofSize: 11)
+        let top: CGFloat = isFlipped ? 2 : bounds.maxY - 15
+        let bottom: CGFloat = isFlipped ? bounds.maxY - 15 : 2
+        let count = item.unresolvedReviewCount.map(String.init) ?? "—"
+        let reviewWidth = ceil((count as NSString).size(withAttributes: [.font: secondaryFont]).width) + 1
+        var end = bounds.maxX - 17
+        draw(count, rect: NSRect(x: end - reviewWidth, y: bottom, width: reviewWidth, height: 14), font: secondaryFont, color: .secondaryLabelColor, alignment: .right)
+        end -= reviewWidth + 10
+        if let position = item.stackPosition {
+            let text = "\(position) ·"
+            let width = ceil((text as NSString).size(withAttributes: [.font: secondaryFont]).width) + 1
+            draw(text, rect: NSRect(x: end - width, y: bottom, width: width, height: 14), font: secondaryFont, color: .secondaryLabelColor)
+            end -= width + 5
+        }
+        var start: CGFloat = 0
+        if let number = item.number {
+            let text = "#\(number) ·"
+            let width = min(bounds.width * 0.3, ceil((text as NSString).size(withAttributes: [.font: font]).width) + 1)
+            draw(text, rect: NSRect(x: 0, y: top, width: width, height: 14), font: font)
+            start = width + 5
+        }
+        draw(item.title, rect: NSRect(x: start, y: top, width: max(0, bounds.maxX - start), height: 14), font: font)
+        draw(item.metadata(), rect: NSRect(x: 0, y: bottom, width: max(0, end), height: 14), font: secondaryFont, color: .secondaryLabelColor)
+    }
+    private func draw(_ text: String, rect: NSRect, font: NSFont, color: NSColor = .labelColor, alignment: NSTextAlignment = .left) {
+        let paragraph = NSMutableParagraphStyle(); paragraph.lineBreakMode = .byTruncatingTail; paragraph.alignment = alignment
+        (text as NSString).draw(in: rect, withAttributes: [.font: font, .foregroundColor: color, .paragraphStyle: paragraph])
+    }
+}
+
+private final class ScorebugCommentIcon: NSImageView {
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+}
+
 private final class ScorebugView: NSView {
+    var tone: GitHubScorebugTone = .neutral
     weak var button: NSButton?
     var onHover: ((Bool) -> Void)?
     private var hoverArea: NSTrackingArea?
@@ -115,10 +214,18 @@ private final class ScorebugView: NSView {
     }
     override func mouseEntered(with event: NSEvent) { onHover?(true) }
     override func mouseExited(with event: NSEvent) { onHover?(false) }
-    override func layout() { super.layout(); button?.frame = bounds.insetBy(dx: 8, dy: 2) }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    override func mouseDown(with event: NSEvent) { button?.performClick(nil) }
+    override func layout() {
+        super.layout()
+        button?.frame = NSRect(x: 25, y: 2, width: max(0, bounds.width - 33), height: bounds.height - 4)
+    }
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsDisplay = true }
     override func draw(_ dirtyRect: NSRect) {
-        NSColor.windowBackgroundColor.withAlphaComponent(1).setFill()
+        let dark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        tone.fill(dark: dark).setFill()
         NSBezierPath(roundedRect: bounds, xRadius: 8, yRadius: 8).fill()
+        tone.indicator(dark: dark).setFill()
+        NSBezierPath(ovalIn: NSRect(x: 9, y: bounds.midY - 4, width: 8, height: 8)).fill()
     }
 }

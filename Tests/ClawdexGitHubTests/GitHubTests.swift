@@ -32,6 +32,38 @@ final class GitHubTests: XCTestCase {
         XCTAssertEqual(try pr(state: "CLOSED").health, .closed)
         XCTAssertEqual(try pr(state: "MERGED", conclusion: "FAILURE").health, .merged)
     }
+    func testStackCardUsesBottomOpenPRAndRetainsPositionAfterParentMerge() throws {
+        let definition = StackDefinition(id: "stack", name: "Old branch slug", repository: "owner/repo", numbers: [1,2,3])
+        let stack = GitHubStack(definition: definition, pullRequests: try [pr(3, head: "tip"), pr(1, state: "MERGED"), pr(2, head: "middle")])
+        XCTAssertEqual(stack.bottomPR?.number, 2)
+        XCTAssertEqual(stack.bottomPosition, 2)
+        let old = try pr()
+        XCTAssertNil(old.createdAt)
+        XCTAssertNil(old.unresolvedReviewCount)
+        let merged = GitHubStack(definition: definition, pullRequests: try [pr(1, state: "MERGED"), pr(2, state: "CLOSED"), pr(3, state: "MERGED")])
+        XCTAssertNil(merged.bottomPR)
+    }
+
+    func testReviewCounterPaginatesAndCountsUnresolvedConversationsOnce() throws {
+        func page(_ threads: [(String, Bool)], next: String?) throws -> Data {
+            try JSONSerialization.data(withJSONObject: ["data": ["repository": ["pullRequest": ["reviewThreads": [
+                "nodes": threads.map { ["id": $0.0, "isResolved": $0.1] as [String: Any] },
+                "pageInfo": ["hasNextPage": next != nil, "endCursor": next as Any? ?? NSNull()]
+            ]]]]])
+        }
+        var cursors: [String?] = []
+        let result = try ReviewThreadCounter.count { cursor in
+            cursors.append(cursor)
+            return try cursor == nil ? page([("a", false), ("b", true)], next: "page-2")
+                : page([("a", false), ("c", false)], next: nil)
+        }
+        XCTAssertEqual(result, 2)
+        XCTAssertEqual(cursors.count, 2)
+        XCTAssertNil(cursors[0]); XCTAssertEqual(cursors[1], "page-2")
+        XCTAssertThrowsError(try ReviewThreadCounter.count { _ in try page([("a", false)], next: "repeated") })
+        XCTAssertThrowsError(try ReviewThreadCounter.count { _ in Data("{\"data\":null,\"errors\":[{\"message\":\"Unavailable\"}]}".utf8) })
+        XCTAssertEqual(try ReviewThreadCounter.count { _ in try page([("a", true)], next: nil) }, 0)
+    }
     func testDiscoveryOrdersParentBeforeChild() throws {
         let prs = try [pr(3, head: "tip", base: "middle"), pr(1, head: "base"), pr(2, head: "middle", base: "base")]
         let groups = StackDiscovery.discover(repository: "owner/repo", prs: prs, previous: [], manual: [])

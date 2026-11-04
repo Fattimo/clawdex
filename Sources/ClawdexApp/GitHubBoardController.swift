@@ -31,20 +31,8 @@ final class GitHubBoardController {
             window.onSelect = { [weak self] id in self?.openStack(id) }
             scorebug = window
         }
-        scorebug?.setItems(stacks.map { stack in
-            let issue = problem(repository: stack.definition.repository)
-            let glyph: String
-            if issue != nil { glyph = "!" }
-            else if stack.ready || stack.merged { glyph = "✓" }
-            else if stack.label == "Needs you" || !stack.validOrder { glyph = "!" }
-            else if stack.label == "Needs review" { glyph = "↗" }
-            else { glyph = "◌" }
-            let next = stack.definition.numbers.first { number in
-                stack.pullRequests.contains { $0.number == number && $0.state == "OPEN" }
-            }
-            let detail = next.map { "\(stack.label) · #\($0)" } ?? stack.label
-            return GitHubScorebugWindow.Item(id: stack.definition.id, title: stack.definition.name,
-                glyph: glyph, status: issue ?? detail, compactStatus: issue == nil ? detail : "Offline")
+        scorebug?.setItems(stacks.compactMap { stack in
+            Self.item(for: stack, issue: problem(repository: stack.definition.repository))
         })
         pet?.companionBottomInset = CompanionLayout.floorGap + CompanionLayout.floorHeight
         layout(); scorebug?.orderFrontRegardless()
@@ -55,6 +43,27 @@ final class GitHubBoardController {
             }
             lastReady[stack.definition.id] = stack.ready
         }
+    }
+
+    static func item(for stack: GitHubStack, issue: String?) -> GitHubScorebugWindow.Item? {
+        guard let pr = stack.bottomPR else { return nil }
+        let tone: GitHubScorebugTone
+        if issue != nil { tone = .neutral }
+        else if stack.pullRequests.contains(where: { $0.state == "OPEN" && $0.statusCheckRollup?.contains(where: \.failed) == true }) { tone = .failed }
+        else if pr.isDraft { tone = .neutral }
+        else if stack.ready { tone = .ready }
+        else if stack.pullRequests.contains(where: { $0.health == .checking }) { tone = .pending }
+        else { tone = .neutral }
+        func date(_ value: String?) -> Date? {
+            guard let value else { return nil }
+            let formatter = ISO8601DateFormatter()
+            if let date = formatter.date(from: value) { return date }
+            formatter.formatOptions.insert(.withFractionalSeconds)
+            return formatter.date(from: value)
+        }
+        return GitHubScorebugWindow.Item(id: stack.definition.id, title: pr.title, status: issue ?? stack.label,
+            number: pr.number, stackPosition: stack.definition.numbers.count > 1 ? "\(stack.bottomPosition ?? 1)/\(stack.definition.numbers.count)" : nil,
+            unresolvedReviewCount: pr.unresolvedReviewCount, createdAt: date(pr.createdAt), updatedAt: date(pr.updatedAt), tone: tone)
     }
 
     func anchor() { layout() }

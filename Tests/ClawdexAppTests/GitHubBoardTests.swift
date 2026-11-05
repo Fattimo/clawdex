@@ -168,6 +168,25 @@ final class GitHubBoardTests: XCTestCase {
         XCTAssertTrue(window.statusSegments.isEmpty)
     }
 
+    func testStripTallModeAndSegmentSelectionSwapsBug() throws {
+        let window = GitHubScorebugWindow()
+        defer { window.close() }
+        let cards = Array(items().prefix(4))
+        window.setItems(cards); window.orderFrontRegardless()
+        let view = try XCTUnwrap(window.contentView)
+        view.layoutSubtreeIfNeeded()
+        window.isStripExpanded = true
+        view.layoutSubtreeIfNeeded()
+        XCTAssertEqual(window.statusSegments.map(\.frame.height), [14, 12, 12, 12])
+        window.select(id: cards[2].id)
+        XCTAssertEqual(window.currentItem?.id, cards[2].id)
+        XCTAssertEqual(window.statusSegments.map(\.frame.height), [12, 12, 14, 12])
+        window.select(id: "missing")
+        XCTAssertEqual(window.currentItem?.id, cards[2].id)
+        window.isStripExpanded = false
+        XCTAssertEqual(window.statusSegments.map(\.frame.height), [3, 3, 5, 3])
+    }
+
     func testClickDestinationSkipsMergedAndClosedParentsInDefinitionOrder() throws {
         func pr(_ number: Int, state: String) throws -> GitHubPR {
             let object: [String: Any] = ["number": number, "title": "PR \(number)", "headRefName": "feature-\(number)",

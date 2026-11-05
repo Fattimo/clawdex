@@ -68,7 +68,12 @@ final class GitHubScorebugWindow: NSPanel {
     private(set) var items: [Item] = []
     private(set) var currentIndex = 0
     var currentItem: Item? { items.indices.contains(currentIndex) ? items[currentIndex] : nil }
-    var statusSegments: [GitHubScorebugSegment] { floor.statusSegments }
+    var statusSegments: [GitHubScorebugSegment] { floor.strip.statusSegments }
+    /// Tall mode: the bottom strip grows and labels each PR while hovered.
+    var isStripExpanded: Bool {
+        get { floor.strip.expanded }
+        set { floor.strip.expanded = newValue }
+    }
     private var timer: Timer?
     private let rotationInterval: TimeInterval
     private var paused = false
@@ -86,7 +91,8 @@ final class GitHubScorebugWindow: NSPanel {
         button.lineBreakMode = .byTruncatingTail
         button.cell?.wraps = false; button.cell?.usesSingleLineMode = false
         button.wantsLayer = true
-        floor.addSubview(button); floor.button = button
+        floor.addSubview(button, positioned: .below, relativeTo: floor.strip); floor.button = button
+        floor.strip.onSelect = { [weak self] id in self?.select(id: id) }
         floor.onHover = { [weak self] hovered in
             self?.paused = hovered; self?.restartTimer()
         }
@@ -113,6 +119,13 @@ final class GitHubScorebugWindow: NSPanel {
         currentIndex = (currentIndex + 1) % items.count
         render(animated: true)
     }
+    /// Swaps the bug to the given PR. Unknown ids are ignored.
+    func select(id: String) {
+        guard let index = items.firstIndex(where: { $0.id == id }), index != currentIndex else { return }
+        currentIndex = index
+        render(animated: true)
+        restartTimer()
+    }
     private func stopTimer() { timer?.invalidate(); timer = nil }
     private func restartTimer() {
         stopTimer()
@@ -126,7 +139,7 @@ final class GitHubScorebugWindow: NSPanel {
         RunLoop.main.add(timer, forMode: .common); self.timer = timer
     }
     private func render(animated: Bool) {
-        floor.items = items; floor.currentIndex = currentIndex
+        floor.strip.items = items; floor.strip.currentIndex = currentIndex
         floor.needsLayout = true; floor.needsDisplay = true
         guard let item = currentItem else {
             button.attributedTitle = NSAttributedString(string: "")
@@ -204,26 +217,89 @@ private final class ScorebugCommentIcon: NSImageView {
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 
-private final class ScorebugView: NSView {
-    var tone: GitHubScorebugTone = .neutral
-    var items: [GitHubScorebugWindow.Item] = []
-    var currentIndex = 0
+/// The per-PR status strip along the bottom edge. Hovering it switches to
+/// tall mode with PR numbers; clicking a segment swaps the bug to that PR.
+final class ScorebugStripView: NSView {
+    static let idleHitHeight: CGFloat = 8
+    static let tallHeight: CGFloat = 14
+    static let tallInactiveHeight: CGFloat = 12
+    var items: [GitHubScorebugWindow.Item] = [] { didSet { if items.count < 2 { expanded = false }; needsDisplay = true } }
+    var currentIndex = 0 { didSet { needsDisplay = true } }
+    var expanded = false {
+        didSet {
+            guard expanded != oldValue else { return }
+            superview?.needsLayout = true; needsDisplay = true
+        }
+    }
+    var onSelect: ((String) -> Void)?
+    var preferredHeight: CGFloat { expanded ? Self.tallHeight : Self.idleHitHeight }
+    private var hoverArea: NSTrackingArea?
+
     var statusSegments: [GitHubScorebugSegment] {
         guard !items.isEmpty, bounds.width > 0 else { return [] }
         let gap: CGFloat = 1
         let width = max(0, (bounds.width - gap * CGFloat(items.count - 1)) / CGFloat(items.count))
         return items.enumerated().map { index, item in
-            GitHubScorebugSegment(id: item.id,
+            let current = index == currentIndex
+            let height: CGFloat = expanded ? (current ? Self.tallHeight : Self.tallInactiveHeight) : (current ? 5 : 3)
+            return GitHubScorebugSegment(id: item.id,
                 frame: NSRect(x: bounds.minX + CGFloat(index) * (width + gap), y: bounds.minY,
-                              width: width, height: index == currentIndex ? 5 : 3), tone: item.tone)
+                              width: width, height: height), tone: item.tone)
         }
     }
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        setAccessibilityElement(false)
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let hoverArea { removeTrackingArea(hoverArea) }
+        let area = NSTrackingArea(rect: .zero,
+            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self)
+        addTrackingArea(area); hoverArea = area
+    }
+    override func mouseEntered(with event: NSEvent) { if items.count > 1 { expanded = true } }
+    override func mouseExited(with event: NSEvent) { expanded = false }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    override func mouseDown(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        guard let segment = statusSegments.first(where: { $0.frame.minX <= point.x && point.x < $0.frame.maxX + 1 })
+        else { return }
+        expanded = true
+        onSelect?(segment.id)
+    }
+    override func draw(_ dirtyRect: NSRect) {
+        let dark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        let font = NSFont.systemFont(ofSize: 9, weight: .semibold)
+        for (index, segment) in statusSegments.enumerated() {
+            let current = index == currentIndex
+            let color = segment.tone.indicator(dark: dark)
+            (expanded && !current ? color.withAlphaComponent(0.6) : color).setFill()
+            segment.frame.fill()
+            guard expanded, let number = items[index].number else { continue }
+            let text = "#\(number)" as NSString
+            let attributes: [NSAttributedString.Key: Any] = [.font: font,
+                .foregroundColor: dark ? NSColor.black.withAlphaComponent(0.85) : NSColor.white]
+            let size = text.size(withAttributes: attributes)
+            guard size.width + 4 <= segment.frame.width else { continue }
+            text.draw(at: NSPoint(x: segment.frame.midX - size.width / 2,
+                                  y: segment.frame.minY + (segment.frame.height - size.height) / 2),
+                      withAttributes: attributes)
+        }
+    }
+}
+
+private final class ScorebugView: NSView {
+    var tone: GitHubScorebugTone = .neutral
+    let strip = ScorebugStripView()
     weak var button: NSButton?
     var onHover: ((Bool) -> Void)?
     private var hoverArea: NSTrackingArea?
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true; layer?.masksToBounds = true; layer?.cornerRadius = 8
+        addSubview(strip)
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
     override func updateTrackingAreas() {
@@ -234,26 +310,20 @@ private final class ScorebugView: NSView {
         addTrackingArea(area); hoverArea = area
     }
     override func mouseEntered(with event: NSEvent) { onHover?(true) }
-    override func mouseExited(with event: NSEvent) { onHover?(false) }
+    override func mouseExited(with event: NSEvent) { onHover?(false); strip.expanded = false }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     override func mouseDown(with event: NSEvent) { button?.performClick(nil) }
     override func layout() {
         super.layout()
         button?.frame = NSRect(x: 25, y: 6, width: max(0, bounds.width - 33), height: max(0, bounds.height - 8))
+        strip.frame = NSRect(x: bounds.minX, y: bounds.minY, width: bounds.width, height: strip.preferredHeight)
     }
-    override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsDisplay = true }
+    override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsDisplay = true; strip.needsDisplay = true }
     override func draw(_ dirtyRect: NSRect) {
         let dark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
         tone.fill(dark: dark).setFill()
         NSBezierPath(roundedRect: bounds, xRadius: 8, yRadius: 8).fill()
         tone.indicator(dark: dark).setFill()
         NSBezierPath(ovalIn: NSRect(x: 9, y: bounds.midY - 4, width: 8, height: 8)).fill()
-        NSGraphicsContext.saveGraphicsState()
-        NSBezierPath(roundedRect: bounds, xRadius: 8, yRadius: 8).addClip()
-        for segment in statusSegments {
-            segment.tone.indicator(dark: dark).setFill()
-            segment.frame.fill()
-        }
-        NSGraphicsContext.restoreGraphicsState()
     }
 }

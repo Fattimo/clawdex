@@ -1,0 +1,36 @@
+textures a persist
+
+# Store a short mouse path without feeding terminal pixels back into it.
+startgroup
+    animation_start os-window-focus-in | user-activity
+    animation_stop os-window-focus-out | user-idle
+    animation_step 16
+    output_texture a
+    shaders clawdex-pointer-history
+endgroup
+startgroup
+    attach
+    output_texture persist
+    shaders clawdex-pointer-save
+endgroup
+startgroup
+    attach
+    shaders clawdex-pointer-compose clawdex-pointer-color
+endgroup
+
+# Click confirmation: a tiny stationary star, fading without an expanding ring.
+startgroup
+    animation_start pointer-left-button-press
+    animation_stop 220
+    animation_curve ease-out
+    animation_step 16
+    shaders clawdex-click-sparkle
+endgroup
+
+startgroup
+    animation_start tab-change
+    animation_stop 120
+    animation_curve ease-out
+    animation_step 16
+    shaders clawdex-tab-tint
+endgroup

@@ -1,0 +1,7 @@
+# A localized mouse halo with no particles, click animation, or tab flash.
+startgroup
+    animation_start os-window-focus-in | user-activity
+    animation_stop os-window-focus-out | user-idle
+    animation_step 16
+    shaders clawdex-pointer-color
+endgroup

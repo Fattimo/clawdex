@@ -74,6 +74,8 @@ Verify events with `tail -f ~/.clawdex/hook-trail.log` — look for `"agent":"co
 
 For kitty, enable `allow_remote_control socket-only` and `listen_on unix:${TMPDIR}/kitty` in `kitty.conf`, then restart kitty if these settings are new. Clawdex mirrors readiness onto the session's tab with a `●`/`○` marker and accent color. A local presence check every three seconds registers idle/new/resumed clients without a prompt and removes exited clients. It preserves hook readiness and manually dismissed entries. Codex can share a server across CLI clients, so its hook's inherited window ID may belong to another tab. Clawdex uses kitty's foreground client process, project root, and observed process identity to focus and color the actual tab. If multiple clients in the same project cannot be distinguished, it leaves their tabs unchanged. Failed updates retry on the next presence check or hook.
 
+The author's kitty setup (vertical tab bar that reads these markers, shaders) is versioned in `kitty/`. Run `kitty/sync.sh` to diff it against `~/.config/kitty`, `kitty/sync.sh push` to install it, or `kitty/sync.sh pull` to bring live edits back. Restart kitty after changing `tab_bar.py`.
+
 ## Install
 
 One command, source-from-clone:

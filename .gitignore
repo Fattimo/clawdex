@@ -7,3 +7,4 @@ test-pets/
 .vscode/
 /output/native-companion-preview/render
 __pycache__/
+kitty/claude.session

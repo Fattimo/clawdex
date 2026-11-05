@@ -215,7 +215,7 @@ private final class ScorebugView: NSView {
         return items.enumerated().map { index, item in
             GitHubScorebugSegment(id: item.id,
                 frame: NSRect(x: bounds.minX + CGFloat(index) * (width + gap), y: bounds.minY,
-                              width: width, height: index == currentIndex ? 5 : 2), tone: item.tone)
+                              width: width, height: index == currentIndex ? 5 : 3), tone: item.tone)
         }
     }
     weak var button: NSButton?

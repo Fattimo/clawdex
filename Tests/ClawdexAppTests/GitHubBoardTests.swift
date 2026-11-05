@@ -154,7 +154,7 @@ final class GitHubBoardTests: XCTestCase {
         let segments = window.statusSegments
         XCTAssertEqual(segments.map(\.id), cards.map(\.id))
         XCTAssertEqual(segments.map(\.tone), tones)
-        XCTAssertEqual(segments.map(\.frame.height), [5, 2, 2, 2])
+        XCTAssertEqual(segments.map(\.frame.height), [5, 3, 3, 3])
         XCTAssertEqual(segments.first?.frame.minX, view.bounds.minX)
         XCTAssertEqual(segments.last?.frame.maxX, view.bounds.maxX)
         XCTAssertGreaterThanOrEqual(window.button.frame.minY, 6)
@@ -162,7 +162,7 @@ final class GitHubBoardTests: XCTestCase {
             XCTAssertEqual(segments[index].frame.minX - segments[index - 1].frame.maxX, 1, accuracy: 0.01)
         }
         window.advance()
-        XCTAssertEqual(window.statusSegments.map(\.frame.height), [2, 5, 2, 2])
+        XCTAssertEqual(window.statusSegments.map(\.frame.height), [3, 5, 3, 3])
         XCTAssertEqual(window.statusSegments[1].id, window.currentItem?.id)
         window.setItems([])
         XCTAssertTrue(window.statusSegments.isEmpty)

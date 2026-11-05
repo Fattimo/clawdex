@@ -9,6 +9,7 @@ final class ClawdexConfigTests: XCTestCase {
         XCTAssertEqual(config.messageVisibility, .none)
         XCTAssertFalse(config.showSwitchboard)
         XCTAssertTrue(config.showGitHubSwitchboard)
+        XCTAssertFalse(config.showMouseTrail)
         XCTAssertEqual(config.petScale, 1.1, accuracy: 0.001)
     }
     func testConfigRoundTripsMessageVisibilitySwitchboardAndScale() throws {
@@ -20,11 +21,13 @@ final class ClawdexConfigTests: XCTestCase {
         config.messageVisibility = .finalOnly
         config.showSwitchboard = false
         config.petScale = 1.1
+        config.showMouseTrail = true
         try config.save(to: path)
 
         let loaded = try ClawdexConfig.load(from: path)
         XCTAssertEqual(loaded.messageVisibility, .finalOnly)
         XCTAssertFalse(loaded.showSwitchboard)
+        XCTAssertTrue(loaded.showMouseTrail)
         XCTAssertEqual(loaded.petScale, 1.1, accuracy: 0.001)
     }
 }

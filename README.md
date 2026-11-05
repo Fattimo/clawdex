@@ -46,6 +46,29 @@ readiness; quoted interruption markers in tool output never count as completion.
 Session and turn IDs prevent stale terminal events from
 changing a newer turn. Internal worktrees stay attached to their original
 client's switchboard entry and kitty tab.
+Internal Codex agents identified by their rollout metadata cannot change the
+foreground session's readiness or animation. Hooks without a transcript from a
+different session also cannot take over a busy switch.
+
+Clearing a session (`SessionStart` with source `clear`) keeps a neutral
+switchboard entry and kitty tab with an accent dot. Prompt/tool activity returns
+it to working; completion lights it again. Late completion hooks cannot light a
+freshly cleared session.
+Codex can instead end its old thread before the replacement emits a startup
+hook. While that CLI is still present in kitty, its entry becomes neutral;
+exiting the CLI still removes it through presence detection.
+Some Codex clears emit no hook until the next prompt. Kitty presence checks
+also recognize the exact empty Codex welcome screen, including its project
+directory, and neutralize both indicators within the next poll. Newer hook
+activity invalidates an older screen sample; retired thread events stay ignored.
+For a CLI resumed with an explicit thread ID, readiness follows that thread.
+Background forks sharing its repository cannot dim its completed turn; a fork
+explicitly resumed in its own client still works normally.
+
+The pet's settings include **Mouse trail in kitty** (off by default). It draws
+a short, tapered gradient trail in a transparent, click-through floating layer
+over the foreground kitty window. It follows mouse positions without capturing
+clicks or keystrokes, and disappears outside kitty or when the pointer stops.
 
 Verify events with `tail -f ~/.clawdex/hook-trail.log` — look for `"agent":"codex"`. If nothing arrives, check `/hooks` for disabled or untrusted hooks and ensure hooks are enabled in your Codex configuration. The shared hook script uses `jq` for structured payload parsing when available, with a basic shell parser as a fallback.
 

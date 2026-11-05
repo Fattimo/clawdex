@@ -11,6 +11,7 @@ struct ClawdexConfig: Codable, Equatable {
     var showSwitchboard: Bool = true
     var petScale: CGFloat = 0.75
     var showGitHubSwitchboard: Bool = true
+    var showMouseTrail: Bool = false
 
     static let defaultPath = URL(fileURLWithPath: NSHomeDirectory())
         .appendingPathComponent(".clawdex/config.json")
@@ -31,12 +32,13 @@ struct ClawdexConfig: Codable, Equatable {
 }
 
 extension ClawdexConfig {
-    private enum CodingKeys: String, CodingKey { case messageVisibility, showSwitchboard, petScale, showGitHubSwitchboard }
+    private enum CodingKeys: String, CodingKey { case messageVisibility, showSwitchboard, petScale, showGitHubSwitchboard, showMouseTrail }
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         messageVisibility = try values.decodeIfPresent(MessageVisibility.self, forKey: .messageVisibility) ?? .all
         showSwitchboard = try values.decodeIfPresent(Bool.self, forKey: .showSwitchboard) ?? true
         petScale = try values.decodeIfPresent(CGFloat.self, forKey: .petScale) ?? 0.75
         showGitHubSwitchboard = try values.decodeIfPresent(Bool.self, forKey: .showGitHubSwitchboard) ?? true
+        showMouseTrail = try values.decodeIfPresent(Bool.self, forKey: .showMouseTrail) ?? false
     }
 }

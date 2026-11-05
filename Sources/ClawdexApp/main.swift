@@ -24,6 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var githubGeneration = UUID()
     private var config = ClawdexConfig()
     private let settingsPopover = SettingsPopover()
+    private var mouseTrail: MouseTrailController!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Hide from Dock & Cmd-Tab. LSUIElement set programmatically since we ship
@@ -40,6 +41,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         window = PetWindow(scale: config.petScale)
+        mouseTrail = MouseTrailController()
+        mouseTrail.setEnabled(config.showMouseTrail)
 
         // Load the user's saved pet (from a prior `select`) if it still
         // resolves, else the alphabetically-first discovered pet. ClawdexCLI
@@ -68,6 +71,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.githubSuspended = false
             self.reloadGitHub()
             self.speech.startKittyObservation()
+            self.mouseTrail.setEnabled(self.config.showMouseTrail)
         }
         window.onSettings = { [weak self] view, rect in
             guard let self else { return }
@@ -83,6 +87,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.config = config
             self.saveConfig()
             self.speech.updateConfig(config)
+            self.mouseTrail.setEnabled(config.showMouseTrail)
             self.githubBoard.update(config: self.githubConfig, snapshot: self.githubSnapshot, visible: config.showGitHubSwitchboard)
         }
 
@@ -110,6 +115,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         server?.stop()
         github?.stop()
         speech?.stopKittyObservation()
+        mouseTrail?.stop()
         if let wakeObserver { NSWorkspace.shared.notificationCenter.removeObserver(wakeObserver) }
         if let sleepObserver { NSWorkspace.shared.notificationCenter.removeObserver(sleepObserver) }
     }
@@ -145,6 +151,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // action narration. Independent of the row state machine.
         if let data = line.data(using: .utf8),
            let s = try? JSONDecoder().decode(SpeechLine.self, from: data) {
+            // Internal Codex workers must not wave/idle the foreground pet.
+            if s.agent == "codex", SpeechController.isCodexSubagentTranscript(path: s.transcript ?? "") { return }
             speech.handle(event: s.event ?? "", narration: s.text,
                           transcriptPath: s.transcript, source: s.source,
                           root: s.root, agent: s.agent, app: s.app,
@@ -203,6 +211,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func suspendForSleep() {
+        mouseTrail.stop()
         githubSuspended = true; githubGeneration = UUID()
         github?.stop(); github = nil
         githubSnapshot.receiverReady = false; githubSnapshot.tunnelURL = nil

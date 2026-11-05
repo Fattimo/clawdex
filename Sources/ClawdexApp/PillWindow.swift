@@ -51,9 +51,10 @@ final class PillWindow: NSPanel {
 
     /// Set the pill's label / state and resize to fit. Returns the new size.
     @discardableResult
-    func setContent(label text: String, lit: Bool, accent: NSColor, fixedWidth: CGFloat? = nil) -> NSSize {
+    func setContent(label text: String, lit: Bool, accent: NSColor, fixedWidth: CGFloat? = nil, neutral: Bool = false) -> NSSize {
         view.title = text
-        view.lit = lit
+        view.lit = lit && !neutral
+        view.neutral = neutral
         view.accent = accent
 
         let tw = min(Self.maxLabelWidth,
@@ -68,7 +69,7 @@ final class PillWindow: NSPanel {
 
         // Settle to the state's resting alpha. Animate only if already shown so
         // a lit→dim transition fades smoothly; first show is handled by fadeIn.
-        restingAlpha = lit ? 1.0 : 0.55
+        restingAlpha = neutral ? 0.85 : (lit ? 1.0 : 0.55)
         if alphaValue > 0.01 {
             NSAnimationContext.runAnimationGroup { ctx in
                 ctx.duration = 0.18
@@ -109,6 +110,7 @@ final class PillView: NSView {
 
     var title = "" { didSet { needsDisplay = true } }
     var lit = false { didSet { needsDisplay = true } }
+    var neutral = false { didSet { needsDisplay = true } }
     var accent: NSColor = .systemBlue { didSet { needsDisplay = true } }
     var onClick: (() -> Void)?
     var onClose: (() -> Void)?
@@ -183,8 +185,10 @@ final class PillView: NSView {
         // Capsule fill: bright neutral + accent wash when lit; flatter and
         // greyer when dim so the pill reads as switched-off.
         Self.baseFill(lit: lit, dark: dark).setFill(); path.fill()
-        accent.withAlphaComponent(lit ? (dark ? 0.30 : 0.16) : (dark ? 0.12 : 0.07)).setFill()
-        path.fill()
+        if !neutral {
+            accent.withAlphaComponent(lit ? (dark ? 0.30 : 0.16) : (dark ? 0.12 : 0.07)).setFill()
+            path.fill()
+        }
 
         // Border: accent + thicker when lit, faint hairline when dim.
         (lit ? accent.withAlphaComponent(0.9) : NSColor.separatorColor.withAlphaComponent(0.5)).setStroke()
@@ -197,7 +201,7 @@ final class PillView: NSView {
         let dotRect = NSRect(x: Self.padL, y: cy - Self.dotSize / 2,
                              width: Self.dotSize, height: Self.dotSize)
         let dot = NSBezierPath(ovalIn: dotRect)
-        if lit {
+        if lit || neutral {
             accent.setFill(); dot.fill()
         } else {
             accent.withAlphaComponent(0.6).setStroke()
@@ -206,7 +210,7 @@ final class PillView: NSView {
         }
 
         // Label.
-        let textColor: NSColor = lit ? (dark ? .white : .labelColor) : .tertiaryLabelColor
+        let textColor: NSColor = lit ? (dark ? .white : .labelColor) : (neutral ? .secondaryLabelColor : .tertiaryLabelColor)
         let paragraph = NSMutableParagraphStyle()
         paragraph.lineBreakMode = .byTruncatingTail
         let attrs: [NSAttributedString.Key: Any] = [.font: Self.font, .foregroundColor: textColor, .paragraphStyle: paragraph]

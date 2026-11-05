@@ -1,0 +1,342 @@
+<style>
+#branchwood-sketch { --bw-wall: light-dark(#e8e9de,#202b32); --bw-paper: light-dark(#faf8f1,#253038); --bw-panel: light-dark(#f0eee5,#202a31); --bw-ink: light-dark(#303d34,#e6ecde); --bw-soft: light-dark(#697466,#aab7a8); --bw-line: light-dark(#d9dccd,#3e4c4c); --bw-green: light-dark(#507347,#9ab981); --bw-ready: light-dark(#446d3f,#94c17e); --bw-red: light-dark(#a24d3a,#e6987b); --bw-gold: light-dark(#ac783b,#d8ac6f); --bw-blue: light-dark(#597d8c,#9abcc7); --bw-shadow: light-dark(#66715122,#0a111a55); --bw-grass: light-dark(#a8b88b,#758d73); --bw-grass2: light-dark(#b5c397,#82977b); --bw-grass3: light-dark(#a0b083,#6c836d); --bw-earth: light-dark(#a89a77,#6c6b58); --bw-earthdark: light-dark(#887f63,#555d50); --bw-path: light-dark(#ddd0a7,#b3b08c); --bw-cream: light-dark(#f4e1b4,#d0c5a7); --bw-wallshade: light-dark(#cbb68c,#9e9d84); --bw-roof: light-dark(#b77357,#b17d68); --bw-roofshade: light-dark(#8d5446,#805c54); --bw-tree: light-dark(#547957,#476d59); --bw-treelight: light-dark(#78986a,#688971); --bw-trunk: light-dark(#8b7557,#7a7260); --bw-water: light-dark(#97b7b2,#6e999b); color:var(--bw-ink); font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; width:100%; color-scheme:light dark; }
+#branchwood-sketch * { box-sizing:border-box; }
+#branchwood-sketch button { font:inherit; color:inherit; }
+#branchwood-sketch button:focus-visible { outline:3px solid var(--bw-blue); outline-offset:3px; }
+#branchwood-sketch [hidden] { display:none!important; }
+#branchwood-sketch .bw-desktop { position:relative; min-height:710px; background:var(--bw-wall); border-radius:16px; overflow:hidden; }
+#branchwood-sketch .bw-menubar { display:flex; align-items:center; gap:20px; padding:10px 22px; background:color-mix(in srgb,var(--bw-paper) 72%,transparent); border-bottom:1px solid var(--bw-line); font-size:12px; }
+#branchwood-sketch .bw-menubar strong { font-weight:600; }
+#branchwood-sketch .bw-menubar .bw-clock { margin-left:auto; }
+#branchwood-sketch .bw-background { position:absolute; inset:42px 0 0; background:radial-gradient(ellipse at 15% 70%,color-mix(in srgb,var(--bw-grass) 28%,transparent),transparent 65%),radial-gradient(ellipse at 95% 10%,color-mix(in srgb,var(--bw-water) 25%,transparent),transparent 65%); pointer-events:none; }
+#branchwood-sketch .bw-desktop-label { position:relative; display:flex; align-items:center; justify-content:space-between; gap:10px; padding:22px 28px 16px; }
+#branchwood-sketch .bw-eyebrow { font:11px/1.5 ui-monospace,SFMono-Regular,monospace; text-transform:uppercase; letter-spacing:.12em; color:var(--bw-soft); }
+#branchwood-sketch .bw-modes { display:flex; gap:3px; background:var(--bw-paper); border:1px solid var(--bw-line); padding:3px; border-radius:10px; }
+#branchwood-sketch .bw-modes button { border:0; background:transparent; border-radius:7px; padding:6px 13px; font-size:12px; }
+#branchwood-sketch .bw-modes button[aria-pressed=true] { background:var(--bw-ink); color:var(--bw-paper); }
+#branchwood-sketch .bw-window { position:relative; margin:0 26px 26px; background:var(--bw-paper); border:1px solid var(--bw-line); border-radius:15px; box-shadow:0 18px 44px var(--bw-shadow); overflow:hidden; }
+#branchwood-sketch .bw-titlebar { display:flex; align-items:center; gap:12px; padding:17px 20px; border-bottom:1px solid var(--bw-line); }
+#branchwood-sketch .bw-brand { display:flex; align-items:center; gap:9px; font-family:Georgia,"Times New Roman",serif; font-size:23px; letter-spacing:-.6px; }
+#branchwood-sketch .bw-brand i { width:19px; height:19px; color:var(--bw-green); }
+#branchwood-sketch .bw-repo { font:11px ui-monospace,SFMono-Regular,monospace; color:var(--bw-soft); margin-left:5px; }
+#branchwood-sketch .bw-demo { margin-left:auto; color:var(--bw-soft); font-size:11px; display:flex; align-items:center; gap:6px; }
+#branchwood-sketch .bw-dot { width:6px; height:6px; border-radius:50%; display:inline-block; background:var(--bw-green); }
+#branchwood-sketch .bw-main { display:grid; grid-template-columns:minmax(0,1fr) 274px; }
+#branchwood-sketch .bw-map-side { min-width:0; }
+#branchwood-sketch .bw-map-head { display:flex; justify-content:space-between; gap:8px; padding:17px 20px 0; color:var(--bw-soft); font-size:12px; }
+#branchwood-sketch .bw-map-head strong { color:var(--bw-ink); font-weight:500; }
+#branchwood-sketch .bw-scene { position:relative; width:100%; }
+#branchwood-sketch canvas { display:block; width:100%; aspect-ratio:1.4; image-rendering:pixelated; touch-action:manipulation; }
+#branchwood-sketch .bw-streets { display:flex; gap:7px; flex-wrap:wrap; justify-content:center; padding:0 14px 16px; }
+#branchwood-sketch .bw-street { display:flex; flex-direction:column; gap:1px; text-align:left; border:1px solid var(--bw-line); background:transparent; border-radius:7px; padding:7px 9px; font-size:11px; }
+#branchwood-sketch .bw-street[aria-pressed=true] { border-color:var(--bw-green); background:color-mix(in srgb,var(--bw-green) 8%,var(--bw-paper)); }
+#branchwood-sketch .bw-street span { color:var(--bw-soft); font-size:11px; }
+#branchwood-sketch .bw-legend { display:flex; align-items:center; justify-content:center; gap:13px; flex-wrap:wrap; padding:11px 14px; border-top:1px solid var(--bw-line); font-size:11px; color:var(--bw-soft); }
+#branchwood-sketch .bw-key { display:flex; align-items:center; gap:5px; }
+#branchwood-sketch .bw-key b { width:7px; height:7px; background:var(--bw-green); display:block; }
+#branchwood-sketch .bw-key[data-state=failed] b { background:var(--bw-red); }
+#branchwood-sketch .bw-key[data-state=running] b { background:var(--bw-blue); }
+#branchwood-sketch .bw-key[data-state=review] b { background:var(--bw-gold); }
+#branchwood-sketch .bw-inspector { border-left:1px solid var(--bw-line); padding:20px 18px; min-width:0; background:var(--bw-panel); }
+#branchwood-sketch .bw-inspector h2 { font-family:Georgia,"Times New Roman",serif; font-size:23px; line-height:1.2; font-weight:400; margin:8px 0 5px; letter-spacing:-.4px; }
+#branchwood-sketch .bw-description { margin:0 0 15px; color:var(--bw-soft); font-size:12px; }
+#branchwood-sketch .bw-stack-status { display:flex; align-items:center; gap:7px; font-size:12px; margin-bottom:18px; }
+#branchwood-sketch .bw-stack-status i { width:14px; height:14px; }
+#branchwood-sketch .bw-stack-list { display:grid; gap:0; }
+#branchwood-sketch .bw-pr { position:relative; width:100%; border:0; padding:11px 9px 11px 24px; text-align:left; background:transparent; border-radius:7px; }
+#branchwood-sketch .bw-pr + .bw-pr:before { content:""; position:absolute; left:9px; top:-10px; width:1px; height:20px; background:var(--bw-line); }
+#branchwood-sketch .bw-pr[aria-pressed=true] { background:var(--bw-paper); box-shadow:0 1px 4px var(--bw-shadow); }
+#branchwood-sketch .bw-pr:after { content:""; position:absolute; left:6px; top:19px; width:7px; height:7px; background:var(--bw-green); border-radius:2px; }
+#branchwood-sketch .bw-pr[data-state=failed]:after { background:var(--bw-red); }
+#branchwood-sketch .bw-pr[data-state=running]:after { background:var(--bw-blue); }
+#branchwood-sketch .bw-pr[data-state=review]:after { background:var(--bw-gold); }
+#branchwood-sketch .bw-pr[data-state=draft]:after { background:var(--bw-soft); }
+#branchwood-sketch .bw-pr-title { font-size:12px; display:block; font-weight:500; }
+#branchwood-sketch .bw-pr-meta { font-size:11px; color:var(--bw-soft); display:block; margin-top:2px; }
+#branchwood-sketch .bw-detail { border-top:1px solid var(--bw-line); margin-top:15px; padding-top:14px; }
+#branchwood-sketch .bw-detail-title { font-size:12px; font-weight:500; }
+#branchwood-sketch .bw-check { display:flex; justify-content:space-between; gap:8px; padding-top:9px; font-size:11px; color:var(--bw-soft); }
+#branchwood-sketch .bw-check strong { color:var(--bw-ink); font-weight:500; }
+#branchwood-sketch .bw-next { margin-top:17px; padding-top:12px; border-top:1px solid var(--bw-line); font-size:12px; }
+#branchwood-sketch .bw-next p { margin:5px 0 0; color:var(--bw-soft); }
+#branchwood-sketch .bw-bottom { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:13px 19px; border-top:1px solid var(--bw-line); font-size:12px; }
+#branchwood-sketch .bw-bottom-status { display:flex; align-items:center; gap:8px; min-width:0; }
+#branchwood-sketch .bw-action { border:0; background:var(--bw-ink); color:var(--bw-paper); border-radius:7px; padding:8px 12px; white-space:nowrap; font-size:12px; }
+#branchwood-sketch .bw-action:disabled { opacity:.5; }
+#branchwood-sketch .bw-sample { display:flex; justify-content:space-between; gap:12px; padding:0 28px 20px; color:var(--bw-soft); font-size:11px; }
+#branchwood-sketch .bw-terminal { display:none; position:absolute; left:35px; top:115px; width:48%; padding:17px 21px 23px; border:1px solid var(--bw-line); border-radius:11px; background:color-mix(in srgb,var(--bw-paper) 80%,transparent); color:var(--bw-soft); box-shadow:0 8px 24px var(--bw-shadow); }
+#branchwood-sketch .bw-terminal-title { display:flex; justify-content:space-between; margin-bottom:26px; font-size:11px; }
+#branchwood-sketch .bw-terminal pre { font:12px/1.9 ui-monospace,SFMono-Regular,monospace; white-space:pre-wrap; margin:0; }
+#branchwood-sketch .bw-terminal pre strong { color:var(--bw-ink); font-weight:500; }
+#branchwood-sketch .bw-toast { display:none; position:absolute; right:27px; top:105px; width:290px; padding:12px 14px; background:var(--bw-paper); border:1px solid var(--bw-line); border-radius:12px; box-shadow:0 8px 24px var(--bw-shadow); }
+#branchwood-sketch .bw-toast div { font-size:11px; color:var(--bw-soft); margin-bottom:3px; }
+#branchwood-sketch .bw-toast strong { font-size:12px; font-weight:500; }
+#branchwood-sketch[data-mode=desktop] .bw-terminal { display:block; }
+#branchwood-sketch[data-mode=desktop] .bw-toast { display:block; }
+#branchwood-sketch[data-mode=desktop] .bw-window { width:440px; max-width:calc(100% - 40px); margin:226px 20px 20px auto; background:transparent; box-shadow:none; border:0; overflow:visible; }
+#branchwood-sketch[data-mode=desktop] .bw-titlebar { padding:0 12px; border:0; }
+#branchwood-sketch[data-mode=desktop] .bw-brand { font-size:18px; }
+#branchwood-sketch[data-mode=desktop] .bw-repo, #branchwood-sketch[data-mode=desktop] .bw-demo, #branchwood-sketch[data-mode=desktop] .bw-inspector, #branchwood-sketch[data-mode=desktop] .bw-map-head, #branchwood-sketch[data-mode=desktop] .bw-streets, #branchwood-sketch[data-mode=desktop] .bw-legend { display:none; }
+#branchwood-sketch[data-mode=desktop] .bw-main { display:block; }
+#branchwood-sketch[data-mode=desktop] .bw-bottom { padding:9px 12px; border:1px solid var(--bw-line); border-radius:9px; background:var(--bw-paper); }
+#branchwood-sketch[data-mode=desktop] .bw-bottom-status { font-size:11px; }
+#branchwood-sketch[data-mode=desktop] .bw-sample { padding-bottom:18px; }
+@media(max-width:760px) { #branchwood-sketch .bw-main { grid-template-columns:minmax(0,1fr) 235px; } #branchwood-sketch .bw-window { margin:0 15px 20px; } #branchwood-sketch .bw-inspector { padding:17px 13px; } #branchwood-sketch .bw-repo { display:none; } }
+@media(max-width:580px) { #branchwood-sketch .bw-main { grid-template-columns:1fr; } #branchwood-sketch .bw-inspector { border-left:0; border-top:1px solid var(--bw-line); } #branchwood-sketch .bw-stack-list { grid-template-columns:repeat(3,minmax(0,1fr)); gap:5px; } #branchwood-sketch .bw-pr { padding:9px 5px 9px 18px; } #branchwood-sketch .bw-pr + .bw-pr:before { display:none; } #branchwood-sketch .bw-pr:after { left:4px; top:16px; width:6px; height:6px; } #branchwood-sketch .bw-desktop-label { padding:15px; flex-wrap:wrap; } #branchwood-sketch .bw-titlebar { padding:13px; } #branchwood-sketch .bw-demo { font-size:10px; } #branchwood-sketch .bw-bottom { align-items:flex-start; flex-direction:column; } #branchwood-sketch .bw-menubar { padding:9px 14px; gap:12px; } #branchwood-sketch .bw-menubar .bw-menu-extra { display:none; } #branchwood-sketch .bw-sample { padding:0 15px 15px; flex-wrap:wrap; } #branchwood-sketch .bw-terminal { left:18px; top:128px; width:calc(100% - 36px); } #branchwood-sketch .bw-terminal pre { font-size:11px; } #branchwood-sketch .bw-toast { right:18px; top:307px; width:calc(100% - 36px); } #branchwood-sketch[data-mode=desktop] .bw-window { margin-top:340px; } #branchwood-sketch .bw-map-head { flex-wrap:wrap; } }
+</style>
+
+<div id="branchwood-sketch" data-mode="inspect" aria-label="Branchwood PR village concept">
+  <div class="bw-desktop">
+    <div class="bw-menubar"><strong>⌘</strong><strong>Branchwood</strong><span>Village</span><span class="bw-menu-extra">Stacks</span><span class="bw-clock">Tue 9:41</span></div>
+    <div class="bw-background" aria-hidden="true"></div>
+    <div class="bw-desktop-label"><span class="bw-eyebrow">A little town for work in flight</span><div class="bw-modes" aria-label="Display mode"><button type="button" class="cursor-interaction" data-mode="desktop" aria-pressed="false">Desktop</button><button type="button" class="cursor-interaction" data-mode="inspect" aria-pressed="true">Inspect village</button></div></div>
+    <div class="bw-terminal" aria-hidden="true"><div class="bw-terminal-title"><span>● ● ●</span><span>app — codex</span></div><pre><strong>~/Projects/app</strong>  feature/billing
+
+› finish the billing migration
+
+  ✓ schema updated
+  ✓ backfill added
+  ◦ waiting for checks…
+
+  <strong>Good place to leave it.</strong></pre></div>
+    <div class="bw-toast" role="status"><div>BRANCHWOOD · JUST NOW</div><strong id="bw-toast-text">Kitty polish is ready to merge.</strong></div>
+    <section class="bw-window" aria-label="PR village">
+      <div class="bw-titlebar"><div class="bw-brand"><i data-lucide="trees" aria-hidden="true"></i>Branchwood</div><span class="bw-repo">fattimo / app + clawdex</span><span class="bw-demo"><span class="bw-dot"></span>Illustrative data</span></div>
+      <div class="bw-main">
+        <div class="bw-map-side">
+          <div class="bw-map-head"><span><strong id="bw-count">7 PRs</strong> · 3 streets</span><span id="bw-map-status">1 stack ready · 1 needs you</span></div>
+          <div class="bw-scene"><canvas id="bw-world" class="cursor-interaction" role="img" aria-label="Isometric village of seven PR cottages on three streets. Select a cottage or choose a street below to inspect its stack.">PR village: Billing rollout has one failed check, Search refresh awaits review, and Kitty polish is ready to merge.</canvas></div>
+          <div class="bw-streets" aria-label="PR stacks"><button class="bw-street cursor-interaction" type="button" data-stack="billing" aria-pressed="true">Billing rollout<span id="bw-billing-count">1 blocker · 3 PRs</span></button><button class="bw-street cursor-interaction" type="button" data-stack="search" aria-pressed="false">Search refresh<span>In review · 2 PRs</span></button><button class="bw-street cursor-interaction" type="button" data-stack="kitty" aria-pressed="false">Kitty polish<span id="bw-kitty-count">Ready · 2 PRs</span></button></div>
+          <div class="bw-legend"><span class="bw-key"><b></b>Ready</span><span class="bw-key" data-state="running"><b></b>Checks running</span><span class="bw-key" data-state="failed"><b></b>Needs you</span><span class="bw-key" data-state="review"><b></b>Review</span><span>Paths = stack order</span></div>
+        </div>
+        <aside class="bw-inspector" aria-label="Selected stack details"><div class="bw-eyebrow" id="bw-stack-repo">app / stack 01</div><h2 id="bw-stack-name">Billing rollout</h2><p class="bw-description" id="bw-stack-description">Three changes, one release.</p><div class="bw-stack-status" id="bw-stack-status"></div><div class="bw-stack-list" id="bw-pr-list" aria-label="Pull requests, base to tip"></div><div class="bw-detail" aria-live="polite"><div class="bw-detail-title" id="bw-detail-title"></div><div id="bw-checks"></div><div class="bw-next"><span class="bw-eyebrow">Next step</span><p id="bw-next-step"></p></div></div></aside>
+      </div>
+      <div class="bw-bottom"><div class="bw-bottom-status" aria-live="polite"><span class="bw-dot"></span><span id="bw-notice">Kitty polish is ready to merge.</span></div><button type="button" id="bw-demo-action" class="bw-action cursor-interaction">Finish billing checks · demo</button></div>
+    </section>
+    <div class="bw-sample"><span>Each cottage is a PR. Each street is a stack.</span><span>Local concept · no GitHub connection</span></div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const root = document.getElementById('branchwood-sketch');
+  const canvas = root.querySelector('#bw-world');
+  const ctx = canvas.getContext('2d');
+  const q = id => root.querySelector('#' + id);
+  const stacks = {
+    billing: { name:'Billing rollout', repo:'app / stack 01', description:'Three changes, one release.', ids:[8121,8122,8123] },
+    search: { name:'Search refresh', repo:'app / stack 02', description:'A faster way to find things.', ids:[8104,8105] },
+    kitty: { name:'Kitty polish', repo:'clawdex / stack 03', description:'The last stretch before shipping.', ids:[8098,8099] }
+  };
+  const prs = [
+    {id:8121,stack:'billing',name:'Billing schema',state:'ready',i:2,j:2},
+    {id:8122,stack:'billing',name:'Account backfill',state:'failed',i:4,j:2},
+    {id:8123,stack:'billing',name:'Enable new flow',state:'running',i:6,j:2},
+    {id:8104,stack:'search',name:'Search index',state:'review',i:2,j:5},
+    {id:8105,stack:'search',name:'Search UI',state:'draft',i:4,j:5},
+    {id:8098,stack:'kitty',name:'Tab resolver',state:'merged',i:7,j:5},
+    {id:8099,stack:'kitty',name:'Focus the client',state:'ready',i:9,j:5}
+  ];
+  const labels = { ready:'Ready to merge', failed:'1 check failed', running:'Checks running', review:'Review requested', draft:'Draft', merged:'Merged' };
+  const originalStates = new Map(prs.map(p => [p.id,p.state]));
+  const state = { stack:'billing', selected:8122, mode:'inspect', completed:false, merged:[] };
+  const appearance = { paths:true, greenery:true, lanterns:true };
+  let hitBoxes = [];
+  let worldScale = 1;
+  let palette = {};
+  function byId(id) { return prs.find(p => p.id === id); }
+  function readyStack(key) { return stacks[key].ids.every(id => ['ready','merged'].includes(byId(id).state)); }
+  function remaining(key) { return stacks[key].ids.filter(id => byId(id).state !== 'merged'); }
+  function restore(saved) {
+    const data = saved?.privateContent;
+    if (!data || typeof data !== 'object') return;
+    if (Object.hasOwn(stacks,data.stack)) state.stack = data.stack;
+    if (stacks[state.stack].ids.includes(data.selected)) state.selected = data.selected;
+    else state.selected = stacks[state.stack].ids[0];
+    if (['desktop','inspect'].includes(data.mode)) state.mode = data.mode;
+    state.completed = data.completed === true;
+    state.merged = Array.isArray(data.merged) ? data.merged.filter(id => prs.some(p => p.id === id && p.stack !== 'search')) : [];
+    for (const p of prs) {
+      p.state = originalStates.get(p.id);
+      if (state.completed && p.stack === 'billing') p.state = 'ready';
+      if (state.merged.includes(p.id)) p.state = 'merged';
+    }
+  }
+  function save() {
+    if (window.openai?.setWidgetState) window.openai.setWidgetState({modelContent:{concept:'Branchwood PR village',display:state.mode,selectedStack:stacks[state.stack].name},privateContent:{...state}}).catch(() => {});
+  }
+  function choose(id) {
+    const p = byId(id); if (!p) return;
+    state.selected = id; state.stack = p.stack;
+    if (state.mode === 'desktop') state.mode = 'inspect';
+    render(); save();
+  }
+  function line(label,value) {
+    const row = document.createElement('div'); row.className = 'bw-check';
+    const a = document.createElement('span'); a.textContent = label;
+    const b = document.createElement('strong'); b.textContent = value;
+    row.append(a,b); return row;
+  }
+  function render() {
+    root.dataset.mode = state.mode;
+    root.querySelectorAll('.bw-modes button').forEach(b => b.setAttribute('aria-pressed',String(b.dataset.mode === state.mode)));
+    root.querySelectorAll('[data-stack]').forEach(b => b.setAttribute('aria-pressed',String(b.dataset.stack === state.stack)));
+    const stack = stacks[state.stack];
+    const p = byId(state.selected);
+    q('bw-stack-name').textContent = stack.name;
+    q('bw-stack-repo').textContent = stack.repo;
+    q('bw-stack-description').textContent = stack.description;
+    const allMerged = remaining(state.stack).length === 0;
+    q('bw-stack-status').textContent = allMerged ? '✓ Entire stack merged' : readyStack(state.stack) ? '✓ Entire stack ready' : state.stack === 'billing' ? '× Stack blocked by #8122' : '◦ Review before merging';
+    q('bw-stack-status').style.color = readyStack(state.stack) ? 'var(--bw-ready)' : state.stack === 'billing' ? 'var(--bw-red)' : 'var(--bw-gold)';
+    q('bw-pr-list').replaceChildren();
+    stack.ids.forEach((id,index) => {
+      const item = byId(id); const button = document.createElement('button');
+      button.className = 'bw-pr cursor-interaction'; button.type = 'button'; button.dataset.state = item.state;
+      button.setAttribute('aria-pressed',String(id === state.selected));
+      button.setAttribute('aria-label',`PR ${id}: ${item.name}. ${labels[item.state]}. ${index === 0 ? 'Base of stack' : 'Depends on PR ' + stack.ids[index-1]}`);
+      const title = document.createElement('span'); title.className='bw-pr-title'; title.textContent=item.name;
+      const meta = document.createElement('span'); meta.className='bw-pr-meta'; meta.textContent=`#${id} · ${labels[item.state]}`;
+      button.append(title,meta); button.addEventListener('click',() => choose(id)); q('bw-pr-list').append(button);
+    });
+    q('bw-detail-title').textContent = `#${p.id} · ${p.name}`;
+    const checkValues = p.state === 'failed' ? [['Checks','11 / 12 passing'],['Failed check','backfill.integration'],['Reviews','Approved'],['Conflicts','None']] : p.state === 'running' ? [['Checks','8 / 12 complete'],['Reviews','Approved'],['Conflicts','None']] : p.state === 'review' ? [['Checks','12 / 12 passing'],['Reviews','1 requested'],['Conflicts','None']] : p.state === 'draft' ? [['Checks','Not started'],['Reviews','Draft'],['Conflicts','None']] : [['Checks','12 / 12 passing'],['Reviews','Approved'],['Conflicts','None']];
+    q('bw-checks').replaceChildren(...checkValues.map(pair => line(...pair)));
+    const previous = stack.ids[stack.ids.indexOf(p.id)-1];
+    q('bw-next-step').textContent = p.state === 'failed' ? 'Fix the backfill integration check, then rerun CI.' : p.state === 'running' ? 'Wait for the remaining checks. We’ll watch for you.' : p.state === 'review' ? 'Waiting on a reviewer. No action needed yet.' : p.state === 'draft' ? 'Finish this change and request a review.' : p.state === 'merged' ? 'Shipped. The next cottage is ready when you are.' : previous && byId(previous).state !== 'merged' ? `Merge the stack from its base, starting with #${remaining(state.stack)[0]}.` : `Merge #${p.id}, then recheck the next PR in the stack.`;
+    const ready = Object.keys(stacks).filter(key => readyStack(key) && remaining(key).length).length;
+    q('bw-count').textContent = `${prs.filter(p => p.state !== 'merged').length} open PRs`;
+    q('bw-map-status').textContent = `${ready} stack${ready === 1 ? '' : 's'} ready${state.completed ? '' : ' · 1 needs you'}`;
+    q('bw-billing-count').textContent = remaining('billing').length === 0 ? 'Merged · 3 PRs' : state.completed ? 'Ready · 3 PRs' : '1 blocker · 3 PRs';
+    q('bw-kitty-count').textContent = remaining('kitty').length ? 'Ready · 2 PRs' : 'Merged · 2 PRs';
+    let notice = state.completed ? 'Billing rollout is ready to merge.' : 'Kitty polish is ready to merge.';
+    if (allMerged) notice = `${stack.name} shipped. A street well built.`;
+    else if (state.merged.length) notice = `#${state.merged[state.merged.length-1]} merged. Your village is growing.`;
+    q('bw-notice').textContent = notice; q('bw-toast-text').textContent = notice;
+    const action = q('bw-demo-action');
+    if (state.mode === 'desktop') { action.textContent='Inspect village'; action.disabled=false; }
+    else if (!state.completed) { action.textContent='Finish billing checks · demo'; action.disabled=false; }
+    else if (readyStack(state.stack) && !allMerged) { action.textContent=`Merge #${remaining(state.stack)[0]} · demo`; action.disabled=false; }
+    else { action.textContent=allMerged ? 'Stack shipped' : 'Waiting for review'; action.disabled=true; }
+    draw();
+  }
+  function color(name) { return getComputedStyle(root).getPropertyValue('--bw-' + name).trim(); }
+  function loadPalette() {
+    // Resolve light-dark() to actual colors for the canvas API.
+    const probe = document.createElement('span'); probe.hidden=true; root.append(probe);
+    for (const key of ['grass','grass2','grass3','earth','earthdark','path','cream','wallshade','roof','roofshade','tree','treelight','trunk','water','ink','soft','paper','green','ready','red','gold','blue']) {
+      probe.style.color = `var(--bw-${key})`; palette[key] = getComputedStyle(probe).color;
+    }
+    probe.remove();
+  }
+  function iso(i,j) { return {x:296+(i-j)*25,y:79+(i+j)*12.5}; }
+  function poly(points,fill) { ctx.fillStyle=fill; ctx.beginPath(); points.forEach(([x,y],i)=>i ? ctx.lineTo(x,y) : ctx.moveTo(x,y)); ctx.closePath(); ctx.fill(); }
+  function rect(x,y,w,h,fill) { ctx.fillStyle=fill; ctx.fillRect(x,y,w,h); }
+  function tile(i,j,fill) { const {x,y}=iso(i,j); poly([[x,y],[x+25,y+12.5],[x,y+25],[x-25,y+12.5]],fill); }
+  function diamond(x,y,w,h,fill) { poly([[x,y-h],[x+w,y],[x,y+h],[x-w,y]],fill); }
+  function tree(i,j,size=1) {
+    const {x,y}=iso(i,j); const s=size;
+    diamond(x+4,y+12,18*s,7*s,palette.grass3);
+    rect(x-3*s,y-18*s,6*s,28*s,palette.trunk);
+    poly([[x,y-63*s],[x+20*s,y-27*s],[x+8*s,y-21*s],[x+23*s,y-9*s],[x,y+2*s],[x-23*s,y-9*s],[x-8*s,y-21*s],[x-20*s,y-27*s]],palette.tree);
+    poly([[x,y-63*s],[x,y+2*s],[x-23*s,y-9*s],[x-8*s,y-21*s],[x-20*s,y-27*s]],palette.treelight);
+    rect(x-7*s,y-30*s,4*s,4*s,palette.grass2);
+  }
+  function house(p) {
+    const {x,y}=iso(p.i,p.j); const h=p.state==='draft'?20:34;
+    const isSelected=p.id===state.selected;
+    const tone=p.state==='failed'?palette.red:p.state==='running'?palette.blue:p.state==='review'||p.state==='draft'?palette.gold:palette.ready;
+    diamond(x+4,y+8,38,16,palette.grass3);
+    if(isSelected) {
+      ctx.strokeStyle=palette.ink; ctx.lineWidth=1.5;
+      ctx.beginPath(); ctx.moveTo(x,y-16); ctx.lineTo(x+36,y+2);ctx.lineTo(x,y+20);ctx.lineTo(x-36,y+2);ctx.closePath();ctx.stroke();
+    }
+    poly([[x-23,y-12],[x,y],[x,y-h],[x-23,y-h-12]],palette.wallshade);
+    poly([[x,y],[x+23,y-12],[x+23,y-h-12],[x,y-h]],palette.cream);
+    if(p.state==='draft') {
+      for(let t=0;t<3;t++) { rect(x-27+t*24,y-46,3,49,palette.trunk); }
+      for(let t=0;t<2;t++) { rect(x-29,y-34+t*18,59,3,palette.trunk); }
+      poly([[x-27,y-40],[x,y-28],[x+27,y-41],[x,y-54]],palette.path);
+    } else {
+      const peak=[x+11.5,y-h-30]; const backPeak=[x-11.5,y-h-42];
+      poly([[x,y-h-24],[x+27,y-h-11],peak,backPeak],tone);
+      ctx.globalAlpha=.2;poly([[x,y-h-24],[x+27,y-h-11],peak,backPeak],palette.ink);ctx.globalAlpha=1;
+      poly([[x,y-h+2],[x+25,y-h-11],peak],palette.cream);
+      poly([[x-28,y-h-12],[x,y-h+2],peak,backPeak],p.state==='merged'?palette.tree:tone);
+      ctx.strokeStyle=palette.ink;ctx.lineWidth=1;ctx.globalAlpha=.2;
+      for(let t=1;t<5;t++) { const f=t/5;ctx.beginPath();ctx.moveTo(x-28+16.5*f,y-h-12-30*f);ctx.lineTo(x+11.5*f,y-h+2-32*f);ctx.stroke(); }
+      ctx.globalAlpha=1;
+      rect(x-15,y-h-34,6,14,palette.wallshade);rect(x-17,y-h-36,10,4,palette.cream);
+    }
+    poly([[x+7,y-3],[x+15,y-7],[x+15,y-24],[x+7,y-20]],palette.trunk);
+    rect(x+12,y-16,2,2,palette.cream);
+    const light=appearance.lanterns && ['ready','merged'].includes(p.state)?palette.gold:palette.blue;
+    poly([[x-17,y-h+3],[x-8,y-h+7],[x-8,y-h+16],[x-17,y-h+12]],light);
+    rect(x-13,y-h+5,1,10,palette.wallshade);
+    rect(x+31,y-39,2,41,palette.trunk);
+    poly([[x+33,y-39],[x+48,y-39],[x+44,y-32],[x+33,y-32]],tone);
+    if(p.state==='failed') { rect(x+37,y-38,2,4,palette.paper);rect(x+37,y-33,2,1,palette.paper); }
+    if(p.state==='ready'||p.state==='merged') { rect(x+36,y-36,2,2,palette.paper);rect(x+38,y-34,2,2,palette.paper);rect(x+40,y-37,2,3,palette.paper); }
+    if(p.state==='review') { rect(x+36,y-37,7,5,palette.paper);rect(x+38,y-35,3,1,tone); }
+    if(p.state==='running') { rect(x+36,y-37,6,1,palette.paper);rect(x+38,y-36,2,3,palette.paper);rect(x+36,y-33,6,1,palette.paper); }
+    hitBoxes.push({id:p.id,x:x-29,y:y-h-46,w:81,h:h+64});
+  }
+  function draw() {
+    const width=canvas.getBoundingClientRect().width;if(!width)return;
+    canvas.width=Math.max(1,Math.round(width/2));canvas.height=Math.round(width/1.4/2);
+    loadPalette();worldScale=width/620;
+    ctx.setTransform(canvas.width/620,0,0,canvas.width/620,0,0);ctx.imageSmoothingEnabled=false;
+    ctx.clearRect(0,0,620,450);hitBoxes=[];
+    const a=iso(0,0),b=iso(11,0),c=iso(11,8),d=iso(0,8);
+    ctx.globalAlpha=.16;diamond(339,337,208,40,palette.ink);ctx.globalAlpha=1;
+    poly([[d.x,d.y],[c.x,c.y],[c.x,c.y+23],[d.x,d.y+23]],palette.earthdark);
+    poly([[b.x,b.y],[c.x,c.y],[c.x,c.y+23],[b.x,b.y+23]],palette.earth);
+    for(let i=0;i<11;i++) for(let j=0;j<8;j++) {
+      const path=appearance.paths&&(j===3||j===6||i===0);
+      const creek=(i>=9&&j>=6)||(i>=10&&j>=4);
+      tile(i,j,creek?palette.water:path?palette.path:palette[['grass','grass2','grass3'][(i*7+j*3)%3]]);
+      if(!path&&!creek&&(i*13+j*7)%4===0) { const p=iso(i,j);rect(p.x-3,p.y+11,3,2,palette.grass2);rect(p.x+4,p.y+15,2,2,palette.grass3); }
+      if(creek) {const p=iso(i,j);rect(p.x-6,p.y+12,8,1,palette.paper);}
+    }
+    // Stepping stones connect each PR to its stack's street.
+    if(appearance.paths) for(const p of prs) { const pos=iso(p.i,p.j+.75);diamond(pos.x,pos.y+6,12,5,palette.path); }
+    const objects=prs.map(p=>({depth:p.i+p.j,draw:()=>house(p)}));
+    if(appearance.greenery) for(const [i,j,s] of [[0,1,.65],[0,5,.8],[1,7,.8],[8,0,.8],[10,1,.7],[5,7,.65],[9,7,.65]]) objects.push({depth:i+j,draw:()=>tree(i,j,s)});
+    // Small village well and notice board.
+    objects.push({depth:10,draw:()=>{const p=iso(6,4);diamond(p.x,p.y+8,14,7,palette.wallshade);rect(p.x-10,p.y-3,20,10,palette.cream);rect(p.x-12,p.y-5,24,4,palette.earth);rect(p.x-10,p.y-24,2,20,palette.trunk);rect(p.x+9,p.y-24,2,20,palette.trunk);poly([[p.x-15,p.y-22],[p.x,p.y-30],[p.x+15,p.y-22],[p.x,p.y-15]],palette.roof);}});
+    objects.sort((a,b)=>a.depth-b.depth).forEach(o=>o.draw());
+    // Fence along the front edge; two tiny gardeners give the town scale.
+    for(let i=1;i<9;i++) {const p=iso(i,7.75);rect(p.x,p.y+12,2,10,palette.trunk);}
+    for(const [i,j] of [[3,3],[7,6]]) {const p=iso(i,j);rect(p.x-2,p.y-3,5,5,palette.cream);rect(p.x-3,p.y+2,7,7,palette.blue);rect(p.x-3,p.y+9,2,4,palette.ink);rect(p.x+2,p.y+9,2,4,palette.ink);rect(p.x-3,p.y-5,7,2,palette.trunk);}
+    // Ready stacks get a lantern at the end of their path.
+    if(appearance.lanterns) for(const [key,i,j] of [['billing',7.4,3],['kitty',9.3,6],['search',5.4,6]]) {
+      if(!readyStack(key))continue;const p=iso(i,j);rect(p.x,p.y-28,2,31,palette.trunk);rect(p.x-4,p.y-32,10,10,palette.gold);rect(p.x-2,p.y-30,6,6,palette.cream);
+    }
+  }
+  root.querySelectorAll('.bw-modes button').forEach(button=>button.addEventListener('click',()=>{state.mode=button.dataset.mode;render();save();}));
+  root.querySelectorAll('[data-stack]').forEach(button=>button.addEventListener('click',()=>{
+    state.stack=button.dataset.stack;state.selected=stacks[state.stack].ids.find(id=>!['ready','merged'].includes(byId(id).state))||remaining(state.stack)[0]||stacks[state.stack].ids[0];render();save();
+  }));
+  canvas.addEventListener('click',event=>{
+    const rect=canvas.getBoundingClientRect();const x=(event.clientX-rect.left)/worldScale,y=(event.clientY-rect.top)/worldScale;
+    const hit=[...hitBoxes].reverse().find(b=>x>=b.x&&x<=b.x+b.w&&y>=b.y&&y<=b.y+b.h);
+    if(hit)choose(hit.id);
+  });
+  q('bw-demo-action').addEventListener('click',()=>{
+    if(state.mode==='desktop')state.mode='inspect';
+    else if(!state.completed) {state.completed=true;state.stack='billing';state.selected=8122;prs.filter(p=>p.stack==='billing').forEach(p=>p.state='ready');}
+    else if(readyStack(state.stack)&&remaining(state.stack).length) {const id=remaining(state.stack)[0];byId(id).state='merged';state.merged.push(id);state.selected=remaining(state.stack)[0]||id;}
+    render();save();
+  });
+  restore(window.openai?.widgetState);render();
+  new ResizeObserver(()=>draw()).observe(canvas);
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change',()=>draw());
+  window.addEventListener('openai:set_globals',event=>{if(event.detail?.globals?.widgetState){restore(event.detail.globals.widgetState);render();}});
+  if(globalThis.Tweak) {
+    const tweak=new Tweak({container:root,onChange:draw});
+    tweak.addToggle(appearance,'paths',{label:'Stack paths'});
+    tweak.addToggle(appearance,'greenery',{label:'Trees & greenery'});
+    tweak.addToggle(appearance,'lanterns',{label:'Ready-stack lanterns'});
+  }
+})();
+</script>

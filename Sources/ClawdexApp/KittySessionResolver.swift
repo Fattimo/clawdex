@@ -8,7 +8,30 @@ enum KittySessionResolver {
         var processID: Int
         var agent: String
         var root: String
+        var emptyPromptObservedAt: Date? = nil
+        var resumeThreadID: String = ""
+        var resumeTranscriptPath: String = ""
         var identity: String { window + ":" + String(processID) }
+    }
+
+    /// Codex can clear its TUI without emitting a lifecycle hook. Recognize
+    /// only its empty welcome screen, never a finished answer or tool output.
+    static func isEmptyCodexPrompt(_ data: Data, root: String) -> Bool {
+        guard data.count <= 262_144, let text = String(data: data, encoding: .utf8) else { return false }
+        let lines = text.components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        guard lines.count >= 4, lines[0].hasPrefix(">_ OpenAI Codex (v"), lines[0].hasSuffix(")"),
+              lines[1].hasPrefix("/") || lines[1].hasPrefix("~/"),
+              projectRoot((lines[1] as NSString).expandingTildeInPath) == projectRoot(root),
+              let prompt = lines.firstIndex(of: "› Ask Codex to do anything"), prompt > 1,
+              lines.filter({ $0.hasPrefix("›") }).count == 1 else { return false }
+        let help = ["To get started, describe a task or try one of these commands:",
+                    "/init - ", "/status - ", "/permissions - ", "/model - ", "/review - "]
+        return lines[2..<prompt].allSatisfy { line in
+            help.contains(where: { line.hasPrefix($0) }) || line.unicodeScalars.allSatisfy {
+                CharacterSet.whitespaces.contains($0) || (0x2800...0x28FF).contains($0.value)
+            }
+        }
     }
 
     /// Local client presence exists before Codex sends its first hook.
@@ -24,11 +47,30 @@ enum KittySessionResolver {
                 let agent = (executable as NSString).lastPathComponent
                 guard ["claude", "codex"].contains(agent),
                       !command.dropFirst().contains(where: { ["app-server", "exec", "mcp-server", "--print", "-p"].contains($0) }) else { continue }
-                result.append(Client(window: String(id), processID: pid, agent: agent, root: projectRoot(cwd)))
+                var client = Client(window: String(id), processID: pid, agent: agent, root: projectRoot(cwd))
+                if agent == "codex", let resume = command.firstIndex(of: "resume"), resume + 1 < command.count,
+                   UUID(uuidString: command[resume + 1]) != nil {
+                    client.resumeThreadID = command[resume + 1].lowercased()
+                }
+                result.append(client)
             }
         }
         return Array(Set(result.map(\.identity))).compactMap { id in result.first { $0.identity == id } }
             .sorted { $0.identity < $1.identity }
+    }
+
+    static func transcriptPath(for threadID: String, sessionsDirectory: URL? = nil) -> String? {
+        guard UUID(uuidString: threadID) != nil else { return nil }
+        let home = ProcessInfo.processInfo.environment["CODEX_HOME"] ?? NSHomeDirectory() + "/.codex"
+        let root = sessionsDirectory ?? URL(fileURLWithPath: home).appendingPathComponent("sessions")
+        guard let files = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles, .skipsPackageDescendants]) else { return nil }
+        var visited = 0
+        while let file = files.nextObject() as? URL, visited < 20_000 {
+            visited += 1
+            if file.lastPathComponent.lowercased().hasSuffix("-" + threadID.lowercased() + ".jsonl") { return file.path }
+        }
+        return nil
     }
 
     static func projectRoot(_ path: String) -> String {

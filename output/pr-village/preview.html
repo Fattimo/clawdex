@@ -1,0 +1,2596 @@
+<!doctype html>
+<html lang="en" data-visualize-standalone>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; style-src 'unsafe-inline' blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; img-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; font-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; media-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; worker-src blob:; connect-src blob: data:; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<title>Pr Village</title>
+<style>:root{color-scheme:light dark;background:light-dark(rgb(255 255 255), rgb(24 24 24))}html,body{margin:0}body{box-sizing:border-box;padding:1rem;background:inherit}iframe{display:block;width:100%;height:calc(100vh - 2rem);margin:0 auto;border:0}</style>
+</head>
+<body>
+<iframe id="codex-visualization" sandbox="allow-scripts" referrerpolicy="no-referrer" title="Pr Village" data-srcdoc="&lt;!doctype html&gt;
+&lt;html lang=&quot;en&quot; data-visualize-standalone&gt;
+&lt;head&gt;
+&lt;meta charset=&quot;utf-8&quot;&gt;
+&lt;meta name=&quot;viewport&quot; content=&quot;width=device-width, initial-scale=1&quot;&gt;
+&lt;meta name=&quot;referrer&quot; content=&quot;no-referrer&quot;&gt;
+&lt;meta http-equiv=&quot;Content-Security-Policy&quot; content=&quot;default-src &#x27;none&#x27;; script-src &#x27;unsafe-inline&#x27; &#x27;unsafe-eval&#x27; &#x27;wasm-unsafe-eval&#x27; blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; style-src &#x27;unsafe-inline&#x27; blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; img-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; font-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; media-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; worker-src blob:; connect-src blob: data:; frame-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;&quot;&gt;
+&lt;title&gt;Pr Village&lt;/title&gt;
+&lt;style&gt;:root {
+  color-scheme: light dark;
+  background-color: var(
+    --background,
+    var(--color-background-primary, light-dark(rgb(255 255 255), rgb(24 24 24)))
+  ) !important;
+
+  /* Agent-facing contract; keep in sync with SKILL.md. */
+  --background: var(
+    --color-background-primary,
+    light-dark(rgb(255 255 255), rgb(24 24 24))
+  );
+  --foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --card: color-mix(in oklab, var(--foreground) 5%, var(--background));
+  --card-foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --popover: var(
+    --color-background-secondary,
+    light-dark(rgb(255 255 255), rgb(45 45 45))
+  );
+  --popover-foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --primary: var(
+    --color-text-info,
+    light-dark(rgb(51 156 255), rgb(131 195 255))
+  );
+  --primary-foreground: var(
+    --color-text-inverse,
+    light-dark(rgb(255 255 255), rgb(13 13 13))
+  );
+  --secondary: var(
+    --color-background-secondary,
+    light-dark(rgb(255 255 255 / 96%), rgb(54 54 54 / 96%))
+  );
+  --secondary-foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --muted: color-mix(in srgb, var(--foreground) 10%, transparent);
+  --muted-foreground: var(
+    --color-text-secondary,
+    light-dark(rgb(26 28 31 / 49.4%), rgb(255 255 255 / 49.8%))
+  );
+  --accent: var(
+    --color-background-info,
+    light-dark(rgb(229 242 255), rgb(13 39 63))
+  );
+  --accent-foreground: var(
+    --color-text-info,
+    light-dark(rgb(51 156 255), rgb(131 195 255))
+  );
+  --destructive: var(
+    --color-text-warning,
+    light-dark(rgb(226 85 7), rgb(255 133 73))
+  );
+  --border: var(
+    --color-border-secondary,
+    light-dark(rgb(26 28 31 / 8%), rgb(255 255 255 / 8.2%))
+  );
+  --input: var(
+    --color-border-primary,
+    light-dark(
+      rgb(26 28 31 / 11.8%),
+      color-mix(in oklab, rgb(0 0 0) 10%, transparent)
+    )
+  );
+  --ring: var(
+    --color-ring-primary,
+    light-dark(rgb(51 156 255), rgb(131 195 255 / 76%))
+  );
+  --font-size-base: var(--font-text-md-size, 14px);
+  --blue: light-dark(rgb(51 156 255), rgb(51 156 255));
+  --orange: light-dark(rgb(226 85 7), rgb(251 106 34));
+  --green: light-dark(rgb(0 162 64), rgb(64 201 119));
+  --red: light-dark(rgb(224 46 42), rgb(255 103 100));
+  --purple: light-dark(rgb(146 79 247), rgb(173 123 249));
+  --yellow: light-dark(rgb(255 195 0), rgb(255 210 64));
+  --viz-series-1: var(--primary);
+  --viz-series-2: light-dark(rgb(243 136 59), rgb(245 154 86));
+  --viz-series-3: light-dark(rgb(93 201 119), rgb(116 213 139));
+  --viz-series-4: light-dark(rgb(235 119 177), rgb(240 143 192));
+  --viz-series-5: light-dark(rgb(155 121 236), rgb(170 145 239));
+  --viz-series-6: light-dark(rgb(58 185 177), rgb(90 203 194));
+
+  /* Internal implementation variables; not part of the agent contract. */
+  --font-sans: -apple-system, system-ui, &quot;Segoe UI&quot;, sans-serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;,
+    monospace;
+  --font-size-normal: max(11px, var(--font-size-base));
+  --font-size-tooltip: calc(var(--font-size-base) - 1px);
+  --font-size-small: max(11px, calc(var(--font-size-base) - 2px));
+  --font-size-h1: calc(var(--font-size-normal) * 1.7142857143);
+  --font-size-h2: calc(var(--font-size-normal) * 1.4285714286);
+  --font-size-h3: calc(var(--font-size-normal) * 1.2857142857);
+  --font-weight-normal: 430;
+  --font-weight-medium: 500;
+  --icon-size: 16px;
+  --line-height-normal: calc(var(--font-size-normal) * 1.5);
+  --line-height-tooltip: calc(var(--font-size-tooltip) * 1.4285714286);
+  --line-height-small: calc(var(--font-size-small) + 4px);
+  --corner-shape: round;
+  --radius: var(--border-radius-lg, 10px);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-2xl: calc(var(--radius) * 1.6);
+  --radius-full: 9999px;
+  --shadow-sm: 0 1px 2px -1px rgb(0 0 0 / 8%);
+  --checkmark-image: url(&quot;data:image/svg+xml,%3Csvg xmlns=&#x27;http://www.w3.org/2000/svg&#x27; viewBox=&#x27;0 0 17 17&#x27;%3E%3Cpath d=&#x27;M12.8961 3.64101C13.1297 3.41418 13.4984 3.37523 13.7779 3.56581C14.0571 3.75635 14.1554 4.11331 14.0299 4.41347L13.9615 4.53847L7.71151 13.7045C7.59411 13.8767 7.4063 13.9877 7.19881 14.0072C6.99136 14.0267 6.78564 13.9533 6.63826 13.806L2.88826 10.056L2.79842 9.9457C2.6192 9.67407 2.64927 9.30496 2.88826 9.06581C3.12738 8.82669 3.49647 8.79676 3.76815 8.97597L3.8785 9.06581L7.03084 12.2182L12.8053 3.74941L12.8961 3.64101Z&#x27;/%3E%3C/svg%3E&quot;);
+
+  /* Legacy aliases; not part of the current agent contract. */
+  --viz-bg: transparent;
+  --viz-panel: var(--card);
+  --viz-border: var(--border);
+  --viz-text: var(--foreground);
+  --viz-muted: var(--muted-foreground);
+  --viz-accent: var(--primary);
+  --viz-accent-text: var(--primary-foreground);
+  --viz-accent-bg: var(--accent);
+  --viz-font-size: var(--font-size-base);
+  --viz-warning: var(--destructive);
+}
+
+:root[data-theme=&quot;light&quot;] {
+  color-scheme: light;
+}
+
+:root[data-theme=&quot;dark&quot;] {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html &gt; body {
+  /* Preserve MCP aliases for older inline renderers without creating :root cycles. */
+  --color-background-primary: var(
+    --background,
+    light-dark(rgb(255 255 255), rgb(24 24 24))
+  );
+  --color-text-primary: var(
+    --foreground,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --color-border-secondary: var(
+    --border,
+    light-dark(rgb(26 28 31 / 8%), rgb(255 255 255 / 8.2%))
+  );
+
+  margin: 0;
+  padding: var(--visualize-paint-gutter, 0px);
+  color: var(--foreground);
+  background: transparent !important;
+  font-family: var(--font-sans) !important;
+  font-size: var(--font-size-normal);
+  font-weight: var(--font-weight-normal);
+  line-height: var(--line-height-normal);
+}
+
+.cursor-interaction {
+  cursor: var(--cursor-interaction, pointer);
+}
+
+a {
+  color: color-mix(in srgb, var(--viz-accent) 80%, var(--viz-text) 20%);
+  cursor: var(--cursor-interaction, pointer);
+  font-weight: var(--font-weight-medium, 500);
+  text-decoration: none;
+  text-underline-offset: 2px;
+}
+
+a:is(:hover, :focus-visible) {
+  text-decoration-line: underline;
+  text-decoration-style: dashed;
+  text-decoration-thickness: 0.5px;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+p {
+  margin-block: 0;
+}
+
+h1 {
+  font-size: var(--font-size-h1);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+h2 {
+  font-size: var(--font-size-h2);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+h3,
+h4,
+h5,
+h6 {
+  font-size: var(--font-size-h3);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.3;
+}
+
+b,
+strong,
+th {
+  font-weight: var(--font-weight-medium);
+}
+
+code:not(pre code) {
+  display: inline;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  corner-shape: var(--corner-shape);
+  background: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  overflow-wrap: anywhere;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  word-break: break-word;
+}
+
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  color: var(--foreground);
+  font: inherit;
+  text-align: start;
+}
+
+.table :is(th, td) {
+  padding-block: 10px;
+  padding-inline: 0 24px;
+  overflow-wrap: anywhere;
+  border-bottom: 1px solid var(--border);
+  text-align: start;
+  vertical-align: top;
+}
+
+.table-responsive &gt; .table :is(th, td) {
+  overflow-wrap: break-word;
+}
+
+.table :is(th, td):last-child {
+  padding-inline-end: 0;
+}
+
+.table :is(caption, thead th) {
+  font-weight: 600;
+}
+
+.table thead th {
+  padding-block: 8px;
+  border-bottom-color: color-mix(in srgb, var(--foreground) 16%, transparent);
+}
+
+.table tbody tr:last-child :is(th, td) {
+  border-bottom: 0;
+}
+
+.table.table-sm :is(th, td) {
+  padding-block: 6px;
+}
+
+.table.table-sm :is(th, td):not(:last-child) {
+  padding-inline-end: 16px;
+}
+
+.table :is(.text-end, [align=&quot;right&quot;]) {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.table :is(.text-center, [align=&quot;center&quot;]) {
+  text-align: center;
+}
+
+.table .text-nowrap {
+  white-space: nowrap;
+}
+
+#widget {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  padding: 0;
+  background: transparent !important;
+}
+
+.card {
+  min-width: 0;
+  padding: 12px;
+  overflow: hidden;
+  overflow-wrap: break-word;
+  border-radius: var(--radius-2xl);
+  corner-shape: var(--corner-shape);
+  color: var(--card-foreground);
+  background: var(--card);
+}
+
+.widget {
+  min-width: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--radius-lg);
+  corner-shape: var(--corner-shape);
+  box-shadow: 0 0 0 0.5px var(--border-strong, var(--border));
+  color: var(--foreground);
+  background: var(--background);
+}
+
+#widget &gt; :not(.card, .widget, .progress) {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.tooltip {
+  position: fixed;
+  z-index: 50;
+  top: 0;
+  left: 0;
+  width: max-content;
+  max-width: min(
+    20rem,
+    var(--tooltip-available-width, calc(100vw - 10px)),
+    calc(100vw - 10px)
+  );
+  max-height: min(
+    var(--tooltip-available-height, calc(100vh - 10px)),
+    calc(100vh - 10px)
+  );
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  corner-shape: var(--corner-shape);
+  color: var(--popover-foreground);
+  background: var(--popover);
+  box-shadow: none;
+  font-size: var(--font-size-tooltip);
+  line-height: var(--line-height-tooltip);
+  overflow-wrap: break-word;
+  white-space: normal;
+  pointer-events: none;
+  user-select: none;
+}
+
+.viz-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(max(180px, 24%), 1fr));
+  gap: 10px;
+}
+
+.viz-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.viz-stat-value {
+  font-size: var(--font-size-h2);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+.viz-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+hr {
+  width: 100%;
+  height: 1px;
+  margin-block: 6px;
+  border: 0;
+  background: var(--border);
+}
+
+.nav {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+}
+
+.progress {
+  display: flex;
+  height: 8px;
+  margin-block: calc((var(--line-height-normal, 1.5em) - 8px) / 2);
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--muted);
+}
+
+.progress-bar:only-child {
+  border-radius: var(--radius-full);
+}
+
+.progress-bar {
+  height: 100%;
+  flex-shrink: 0;
+  border: 0;
+  background: var(--viz-series-1);
+}
+
+.viz-badge {
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+  color: var(--accent-foreground);
+  background: var(--accent);
+  font-weight: var(--font-weight-medium);
+}
+
+small,
+.text-small,
+.viz-badge {
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-small);
+}
+
+.text-muted {
+  color: var(--muted-foreground);
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.viz-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.viz-controls &gt; .form-label {
+  display: grid;
+  min-width: min(100%, 260px);
+  flex: 1 1 280px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 2px 12px;
+  margin-bottom: 0;
+}
+
+.viz-controls &gt; .form-label &gt; :is(.form-control, .form-range, .form-select) {
+  grid-column: 1 / -1;
+}
+
+.btn,
+.nav-link,
+.form-check-input,
+.form-control,
+.form-range,
+.form-select {
+  font: inherit;
+}
+
+.btn,
+.nav-link {
+  appearance: button;
+  display: inline-flex;
+  inline-size: fit-content;
+  max-inline-size: 100%;
+  min-height: 28px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin: 0;
+  padding: 0 8px;
+  -webkit-app-region: no-drag;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg);
+  corner-shape: var(--corner-shape);
+  color: var(--secondary-foreground);
+  background: var(--secondary);
+  cursor: var(--cursor-interaction, pointer);
+  text-align: center;
+  text-decoration: none;
+  white-space: nowrap;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+.btn:is(.btn-block, .viz-tile) {
+  inline-size: 100%;
+}
+
+.btn.viz-tile {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+a.btn {
+  cursor: var(--cursor-interaction, pointer);
+  text-decoration: none;
+}
+
+.btn:not(:disabled):hover,
+.nav-link:not(:disabled):not([aria-disabled=&quot;true&quot;]):hover {
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.btn-primary {
+  border-color: transparent;
+  color: var(--primary-foreground);
+  background: var(--foreground);
+  background-clip: padding-box;
+}
+
+.btn-primary .text-muted {
+  color: color-mix(in srgb, var(--primary-foreground) 50%, transparent);
+}
+
+.btn-primary:not(:disabled):hover {
+  background: color-mix(in srgb, var(--foreground) 80%, transparent);
+  background-clip: padding-box;
+}
+
+.btn-ghost {
+  border-color: transparent;
+  color: var(--muted-foreground);
+  background: transparent;
+}
+
+.btn-ghost:not(:disabled):hover {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.nav-pills .nav-link {
+  min-width: 0;
+  border-color: transparent;
+  color: var(--muted-foreground);
+  background: transparent;
+}
+
+.nav-justified .nav-link {
+  flex: 1 1 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.nav-pills .nav-link.active {
+  color: var(--foreground);
+  background: var(--muted);
+}
+
+/* Shared preview chrome; product styles stay inside each variant. */
+.viz-dotted-background {
+  background-image: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--foreground) 14%, transparent) 0.8px,
+    transparent 0.8px
+  );
+  background-position: center;
+  background-size: 16px 16px;
+}
+
+.viz-carousel {
+  position: relative;
+  min-width: 0;
+}
+
+.viz-carousel:has(&gt; .viz-carousel-controls) {
+  min-height: calc(60px + var(--viz-carousel-picker-height, 0px));
+  padding-bottom: 60px;
+}
+
+.viz-carousel &gt; [data-variant][hidden] {
+  display: none !important;
+}
+
+.viz-carousel &gt; [data-variant] {
+  isolation: isolate;
+}
+
+.viz-carousel-controls {
+  --viz-carousel-hover: light-dark(
+    color-mix(in srgb, var(--foreground) 5.4%, transparent),
+    color-mix(in srgb, var(--foreground) 7.8%, transparent)
+  );
+  position: absolute;
+  z-index: 2;
+  bottom: 8px;
+  left: 50%;
+  display: flex;
+  width: max-content;
+  /* Leave room for the host&#x27;s design-controls launcher at the trailing edge. */
+  max-width: calc(100% - 96px);
+  align-items: center;
+  gap: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  color: var(--foreground);
+  background: var(--background);
+  font-family: var(--font-sans);
+  /* Match the settings dropdown chrome independently of the content font size. */
+  font-size: 13px;
+  font-weight: var(--font-weight-normal);
+  line-height: 18px;
+  transform: translateX(-50%);
+  user-select: none;
+}
+
+.viz-carousel-controls button,
+.viz-carousel-picker &gt; summary {
+  display: flex;
+  min-height: 30px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 0 6px;
+  -webkit-app-region: no-drag;
+  border: 0;
+  border-radius: 14px;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.viz-carousel-controls &gt; button,
+.viz-carousel-picker &gt; summary {
+  position: relative;
+  isolation: isolate;
+}
+
+.viz-carousel-controls &gt; button {
+  --icon-size: 16px;
+  width: 30px;
+  padding: 0;
+}
+
+.viz-carousel-picker &gt; summary {
+  padding-inline: 12px;
+}
+
+.viz-carousel-controls .viz-carousel-caret {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  margin: 0;
+  color: inherit;
+  transform: rotate(180deg);
+}
+
+.viz-carousel-controls &gt; button &gt; svg,
+.viz-carousel-controls .viz-carousel-caret,
+.viz-carousel-count {
+  opacity: 0.5;
+}
+
+.viz-carousel-controls &gt; button::before,
+.viz-carousel-picker &gt; summary::before {
+  position: absolute;
+  z-index: -1;
+  inset: 3px;
+  border-radius: 12px;
+  content: &quot;&quot;;
+  pointer-events: none;
+}
+
+.viz-carousel-controls &gt; button:hover::before,
+.viz-carousel-picker &gt; summary:hover::before {
+  background: var(--viz-carousel-hover);
+}
+
+.viz-carousel-controls &gt; button,
+.viz-carousel-controls [data-lucide],
+.viz-carousel-controls .lucide {
+  flex-shrink: 0;
+}
+
+.viz-carousel-picker {
+  min-width: 0;
+}
+
+.viz-carousel-picker &gt; summary {
+  min-width: 0;
+  list-style: none;
+}
+
+.viz-carousel-picker &gt; summary::-webkit-details-marker {
+  display: none;
+}
+
+.viz-carousel-count {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.viz-carousel-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.viz-carousel-options {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 4px);
+  left: 0;
+  display: flex;
+  max-height: 240px;
+  flex-direction: column;
+  gap: 2px;
+  overflow: auto;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--background);
+  box-shadow: 0 4px 12px light-dark(rgb(0 0 0 / 6%), rgb(0 0 0 / 25%));
+}
+
+.viz-carousel-options &gt; button {
+  width: 100%;
+  min-height: 28px;
+  justify-content: flex-start;
+  padding: 4px 8px;
+  font-size: var(--font-size-small);
+  text-align: start;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.viz-carousel-options &gt; [aria-current=&quot;true&quot;],
+.viz-carousel-options &gt; button:hover {
+  background: var(--viz-carousel-hover);
+}
+
+.btn:disabled,
+.nav-link:disabled,
+.nav-link[aria-disabled=&quot;true&quot;] {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+[data-lucide] {
+  stroke-width: 1.6;
+}
+
+.form-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--foreground);
+}
+
+.form-control {
+  display: block;
+  width: 100%;
+  min-height: 28px;
+  padding: 0 8px;
+  outline: none;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg);
+  corner-shape: var(--corner-shape);
+  color: var(--foreground);
+  background: var(--secondary);
+}
+
+.form-control::placeholder {
+  color: var(--muted-foreground);
+}
+
+.form-control[type=&quot;file&quot;] {
+  padding: 0;
+  overflow: hidden;
+  cursor: var(--cursor-interaction, pointer);
+}
+
+.form-control[type=&quot;file&quot;]::file-selector-button {
+  min-height: 26px;
+  margin-right: 8px;
+  padding: 0 8px;
+  border: 0;
+  border-right: 1px solid var(--input);
+  color: var(--secondary-foreground);
+  background: var(--secondary);
+  cursor: inherit;
+  font: inherit;
+}
+
+.form-control[type=&quot;file&quot;]:not(:disabled):hover::file-selector-button {
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.form-control-color[type=&quot;color&quot;] {
+  width: 40px;
+  height: 28px;
+  padding: 3px;
+  cursor: var(--cursor-interaction, pointer);
+}
+
+.form-control-color[type=&quot;color&quot;]::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.form-control-color[type=&quot;color&quot;]::-webkit-color-swatch {
+  border: 0;
+  border-radius: calc(var(--radius-lg) - 4px);
+  corner-shape: var(--corner-shape);
+}
+
+textarea.form-control {
+  height: auto;
+  min-height: 72px;
+  padding: 8px 10px;
+  resize: vertical;
+}
+
+.form-control:focus-visible {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-control:disabled,
+.form-select:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.form-select {
+  appearance: none;
+  display: block;
+  width: 100%;
+  min-height: 28px;
+  margin: 0;
+  padding: 0 32px 0 8px;
+  outline: none;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg);
+  corner-shape: var(--corner-shape);
+  color: var(--foreground);
+  background-color: var(--secondary);
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted-foreground) 50%),
+    linear-gradient(135deg, var(--muted-foreground) 50%, transparent 50%);
+  background-position:
+    calc(100% - 14px) 50%,
+    calc(100% - 10px) 50%;
+  background-repeat: no-repeat;
+  background-size: 4px 4px;
+  cursor: var(--cursor-interaction, default);
+}
+
+.form-select:not(:disabled):hover {
+  background-color: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.form-select:focus-visible {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-check {
+  display: flex;
+  min-height: 20px;
+  align-items: center;
+  gap: 6px;
+}
+
+.form-check-input {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  margin: 0;
+  border: 1px solid var(--input);
+  color: var(--primary-foreground);
+  background-color: transparent;
+  cursor: var(--cursor-interaction, default);
+  transition:
+    background-color 150ms,
+    border-color 150ms,
+    box-shadow 150ms;
+}
+
+.form-check:not(.form-switch) .form-check-input[type=&quot;checkbox&quot;] {
+  border-color: var(--input);
+  border-radius: var(--radius-sm);
+  corner-shape: var(--corner-shape);
+  background-color: var(--secondary);
+  box-shadow: var(--shadow-sm);
+}
+
+.form-check:not(.form-switch)
+  .form-check-input:not(:disabled):not(:checked):hover {
+  background-color: var(--card);
+}
+
+.form-check:not(.form-switch) .form-check-input[type=&quot;checkbox&quot;]:checked {
+  border-color: var(--primary);
+  background-color: var(--primary);
+}
+
+.form-check:not(.form-switch)
+  .form-check-input[type=&quot;checkbox&quot;]:checked::before {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--primary-foreground);
+  content: &quot;&quot;;
+  mask: var(--checkmark-image) center / 12px 12px no-repeat;
+}
+
+.form-check-input[type=&quot;radio&quot;] {
+  width: 14px;
+  height: 14px;
+  border-radius: var(--radius-full);
+}
+
+.form-check-input[type=&quot;radio&quot;]:checked {
+  border: 2px solid var(--primary);
+  background:
+    radial-gradient(circle, var(--primary-foreground) 0 2.5px, transparent 3px),
+    var(--primary);
+}
+
+.form-check:not(.form-switch) .form-check-input:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.form-check:not(.form-switch) .form-check-input:disabled {
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.form-check:not(.form-switch) .form-check-input:disabled + .form-check-label {
+  cursor: not-allowed;
+}
+
+.form-switch .form-check-input:disabled,
+.form-switch .form-check-input:disabled + .form-check-label {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.form-check-label {
+  color: var(--foreground);
+  cursor: var(--cursor-interaction, default);
+}
+
+.form-switch .form-check-input {
+  position: relative;
+  width: 32px;
+  height: 20px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--muted);
+  box-shadow: none;
+  transition: background-color 200ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+.form-switch .form-check-input::before {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 16px;
+  height: 16px;
+  box-sizing: border-box;
+  border: 1px solid light-dark(var(--primary-foreground), var(--foreground));
+  border-radius: var(--radius-full);
+  background: light-dark(var(--primary-foreground), var(--foreground));
+  box-shadow: var(--shadow-sm);
+  content: &quot;&quot;;
+  transform: translate(2px, -50%);
+  transition: transform 200ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+.form-switch .form-check-input:checked {
+  background: var(--primary);
+}
+
+.form-switch .form-check-input:checked::before {
+  transform: translate(14px, -50%);
+}
+
+.form-switch .form-check-input:focus-visible {
+  box-shadow: 0 0 0 2px var(--ring);
+}
+
+.form-range {
+  appearance: none;
+  display: block;
+  width: 100%;
+  height: 28px;
+  flex: 1;
+  margin: 0;
+  padding: 0;
+  outline: none;
+  border: 0;
+  accent-color: var(--primary);
+  background: linear-gradient(
+      color-mix(in srgb, var(--foreground) 7%, transparent),
+      color-mix(in srgb, var(--foreground) 7%, transparent)
+    )
+    center / 100% 2px no-repeat;
+}
+
+.form-range::-webkit-slider-runnable-track {
+  height: 28px;
+  background: transparent;
+}
+
+.form-range::-webkit-slider-thumb {
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  margin-top: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: light-dark(var(--primary-foreground), var(--foreground));
+}
+
+.form-range:focus-visible::-webkit-slider-thumb {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-range::-moz-range-track {
+  height: 28px;
+  background: transparent;
+}
+
+.form-range::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: light-dark(var(--primary-foreground), var(--foreground));
+}
+
+.form-range:focus-visible::-moz-range-thumb {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-range:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.btn:not(.btn-primary, .viz-tile):is(
+  [aria-pressed=&quot;true&quot;],
+  [aria-selected=&quot;true&quot;],
+  .is-selected
+) {
+  border-color: var(--primary);
+  color: var(--primary-foreground);
+  background: var(--primary);
+}
+
+.btn.viz-tile:is([aria-pressed=&quot;true&quot;], [aria-selected=&quot;true&quot;], .is-selected) {
+  border-color: var(--primary);
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+
+.btn:focus-visible,
+.nav-link:focus-visible,
+.viz-carousel-controls :is(button, summary):focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+@media (pointer: coarse) {
+  .viz-carousel:has(&gt; .viz-carousel-controls) {
+    min-height: calc(76px + var(--viz-carousel-picker-height, 0px));
+    padding-bottom: 76px;
+  }
+
+  .btn,
+  .nav-link,
+  .viz-carousel-controls button,
+  .viz-carousel-picker &gt; summary,
+  .form-control,
+  .form-select {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  /* Keep small-screen WebKit from zooming when a text field receives focus. */
+  .form-control,
+  .form-select {
+    font-size: max(16px, var(--font-size-normal));
+  }
+
+  .form-control[type=&quot;file&quot;]::file-selector-button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .form-control-color[type=&quot;color&quot;] {
+    width: 44px;
+    height: 44px;
+  }
+
+  .form-control:is(
+    [type=&quot;date&quot;],
+    [type=&quot;datetime-local&quot;],
+    [type=&quot;month&quot;],
+    [type=&quot;time&quot;],
+    [type=&quot;week&quot;]
+  ) {
+    min-width: 0;
+    max-width: 100%;
+    padding-block: 8px;
+  }
+
+  .form-check {
+    min-height: 44px;
+    padding-inline: 15px;
+  }
+
+  .form-check-input {
+    position: relative;
+  }
+
+  .form-check-input::after {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 44px;
+    height: 44px;
+    content: &quot;&quot;;
+    transform: translate(-50%, -50%);
+  }
+
+  .form-check-label {
+    display: inline-flex;
+    min-width: 44px;
+    min-height: 44px;
+    align-items: center;
+  }
+
+  .form-range {
+    height: 44px;
+    touch-action: pan-y;
+  }
+
+  .form-range::-webkit-slider-runnable-track {
+    height: 44px;
+  }
+
+  .form-range::-moz-range-track {
+    height: 44px;
+  }
+
+  .form-range::-webkit-slider-thumb {
+    margin-top: 12px;
+  }
+}
+
+svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+#widget &gt; svg {
+  width: 100%;
+}
+
+/* Model-authored chart rules can otherwise stretch icons after these styles load. */
+svg.lucide {
+  display: block;
+  width: var(--icon-size) !important;
+  height: var(--icon-size) !important;
+  flex: none;
+  margin: 0 !important;
+  stroke-width: 1.6;
+}
+
+.text-warning,
+.text-destructive {
+  color: var(--destructive);
+}
+
+html&gt;body{padding:0}&lt;/style&gt;
+&lt;/head&gt;
+&lt;body&gt;
+&lt;script type=&quot;application/json&quot; id=&quot;codex-visualization-widget-state&quot;&gt;__CODEX_VISUALIZATION_WIDGET_STATE__&lt;/script&gt;
+&lt;script&gt;(() =&gt; {
+  const root = document.documentElement;
+  const mediaQuery = globalThis.matchMedia(&quot;(prefers-color-scheme: dark)&quot;);
+  const apply = Reflect.apply;
+  const isArray = Array.isArray;
+  const hasOwn = Object.hasOwn;
+  const parentWindow = globalThis.parent;
+  const stringify = JSON.stringify;
+  const parse = JSON.parse;
+  const encode = TextEncoder.prototype.encode.bind(new TextEncoder());
+  const initialStateElement = document.getElementById(
+    &quot;codex-visualization-widget-state&quot;,
+  );
+  const initialGlobals = parse(initialStateElement?.textContent ?? &quot;{}&quot;);
+  initialStateElement?.remove();
+  /** @type {Record&lt;string, unknown&gt; | null} */
+  let state = initialGlobals.widgetState ?? null;
+  const statePersistence = initialGlobals.statePersistence ?? &quot;none&quot;;
+  let nextStateRequestId = 0;
+  /** @type {Map&lt;number, { resolve: () =&gt; void; reject: (error: Error) =&gt; void; timeout: ReturnType&lt;typeof globalThis.setTimeout&gt;; serializedState: string }&gt;} */
+  const pendingStateWrites = new Map();
+  const persistenceError = () =&gt;
+    Object.assign(
+      new Error(&quot;The host could not persist the widget state update&quot;),
+      {
+        code: -32000,
+        data: { code: &quot;widget_state_persistence_failed&quot;, retryable: false },
+      },
+    );
+  /**
+   * @param {object} prototype
+   * @param {string} property
+   */
+  const getPrototypeGetter = (prototype, property) =&gt; {
+    // oxlint-disable-next-line typescript/unbound-method -- invoked through captured Reflect.apply
+    const getter = Object.getOwnPropertyDescriptor(prototype, property)?.get;
+    if (getter == null) {
+      throw new Error(`Missing ${property} getter`);
+    }
+    return getter;
+  };
+  const getMessageData = getPrototypeGetter(MessageEvent.prototype, &quot;data&quot;);
+  const getMessagePorts = getPrototypeGetter(MessageEvent.prototype, &quot;ports&quot;);
+  const getMessageSource = getPrototypeGetter(MessageEvent.prototype, &quot;source&quot;);
+  // oxlint-disable-next-line typescript/unbound-method -- captured before the untrusted fragment runs
+  const addHostMessageListener = MessagePort.prototype.addEventListener;
+  // oxlint-disable-next-line typescript/unbound-method -- captured before the untrusted fragment runs
+  const postHostMessage = MessagePort.prototype.postMessage;
+  // oxlint-disable-next-line typescript/unbound-method -- captured before the untrusted fragment runs
+  const startHostPort = MessagePort.prototype.start;
+  // oxlint-disable-next-line typescript/unbound-method -- captured before the untrusted fragment runs
+  const stopMessagePropagation = Event.prototype.stopImmediatePropagation;
+  /** @type {MessagePort | null} */
+  let hostPort = null;
+  const postToHost = (type, payload) =&gt; {
+    if (hostPort != null) {
+      apply(postHostMessage, hostPort, [{ type, ...payload }]);
+    }
+  };
+  const openExternal = ({ href }) =&gt; {
+    if (globalThis.navigator.userActivation?.isActive === true) {
+      postToHost(&quot;open-external&quot;, { href });
+    }
+  };
+  const sendFollowUpMessage = ({ context, prompt, title }) =&gt; {
+    if (globalThis.navigator.userActivation?.isActive === true) {
+      postToHost(&quot;follow-up&quot;, { context, prompt, title });
+    }
+    return Promise.resolve();
+  };
+  /**
+   * @param {Record&lt;string, unknown&gt; | ((previous: Record&lt;string, unknown&gt; | null) =&gt; Record&lt;string, unknown&gt;)} next
+   * @returns {Promise&lt;void&gt;}
+   */
+  const setWidgetState = async (next) =&gt; {
+    const nextState = typeof next === &quot;function&quot; ? next(state) : next;
+    if (
+      nextState == null ||
+      typeof nextState !== &quot;object&quot; ||
+      isArray(nextState)
+    ) {
+      throw new TypeError(&quot;Widget state must be a JSON object&quot;);
+    }
+    const inputState = stringify(
+      nextState,
+      (_key, /** @type {unknown} */ value) =&gt; {
+        if (
+          typeof value === &quot;undefined&quot; ||
+          typeof value === &quot;function&quot; ||
+          typeof value === &quot;symbol&quot; ||
+          (typeof value === &quot;number&quot; &amp;&amp; !Number.isFinite(value))
+        ) {
+          throw new TypeError(&quot;Widget state must be a JSON object&quot;);
+        }
+        return value;
+      },
+    );
+    const parsedState = parse(inputState);
+    if (
+      parsedState == null ||
+      typeof parsedState !== &quot;object&quot; ||
+      isArray(parsedState)
+    ) {
+      throw new TypeError(&quot;Widget state must be a JSON object&quot;);
+    }
+    const storedState = {
+      modelContent: null,
+      privateContent: null,
+      ...parsedState,
+    };
+    const serializedState = stringify(storedState);
+    if (encode(serializedState).length &gt; 16 * 1024) {
+      throw new TypeError(
+        &quot;Widget state must be a JSON object of at most 16 KiB&quot;,
+      );
+    }
+    if (
+      hasOwn(storedState, &quot;imageIds&quot;) &amp;&amp;
+      (!isArray(storedState.imageIds) ||
+        storedState.imageIds.some(
+          (/** @type {unknown} */ id) =&gt; typeof id !== &quot;string&quot;,
+        ))
+    ) {
+      throw new TypeError(&quot;Widget state imageIds must be an array of strings&quot;);
+    }
+    if (storedState.imageIds?.length &gt; 0) {
+      throw Object.assign(
+        new TypeError(&quot;Visualization state does not support image attachments&quot;),
+        { code: -32602, data: { code: &quot;images_unsupported&quot; } },
+      );
+    }
+    state = storedState;
+    globalThis.openai.widgetState = state;
+    globalThis.dispatchEvent(
+      new CustomEvent(&quot;openai:set_globals&quot;, {
+        detail: { globals: { widgetState: state } },
+      }),
+    );
+    if (statePersistence === &quot;none&quot;) {
+      throw persistenceError();
+    }
+    const id = ++nextStateRequestId;
+    return new Promise((resolve, reject) =&gt; {
+      const timeout = globalThis.setTimeout(() =&gt; {
+        pendingStateWrites.delete(id);
+        reject(persistenceError());
+      }, 30_000);
+      pendingStateWrites.set(id, { resolve, reject, timeout, serializedState });
+      postToHost(&quot;widget-state-write&quot;, { id, state: serializedState });
+    });
+  };
+  const syncTheme = () =&gt; {
+    const theme = mediaQuery.matches ? &quot;dark&quot; : &quot;light&quot;;
+    root.dataset.theme = theme;
+    globalThis.openai = {
+      ...globalThis.openai,
+      openExternal,
+      sendFollowUpMessage,
+      setWidgetState,
+      theme,
+      visualizationStyleVariables: {},
+      visualizationTheme: theme,
+      widgetState: state,
+      statePersistence,
+      stateModelContext: &quot;none&quot;,
+    };
+    globalThis.dispatchEvent(
+      new CustomEvent(&quot;openai:set_globals&quot;, {
+        detail: { globals: globalThis.openai },
+      }),
+    );
+  };
+  const sendHeight = () =&gt; {
+    postToHost(&quot;height&quot;, {
+      height: Math.ceil(
+        Math.max(
+          document.body.scrollHeight,
+          document.body.getBoundingClientRect().height,
+        ),
+      ),
+    });
+  };
+
+  globalThis.addEventListener(
+    &quot;message&quot;,
+    (event) =&gt; {
+      const data = apply(getMessageData, event, []);
+      const ports = apply(getMessagePorts, event, []);
+      const source = apply(getMessageSource, event, []);
+      if (
+        hostPort != null ||
+        source !== parentWindow ||
+        typeof data !== &quot;object&quot; ||
+        data?.type !== &quot;codex-visualization-initialize&quot; ||
+        !isArray(ports) ||
+        ports.length !== 1
+      ) {
+        return;
+      }
+      apply(stopMessagePropagation, event, []);
+      const nextHostPort = ports[0];
+      try {
+        apply(addHostMessageListener, nextHostPort, [
+          &quot;message&quot;,
+          (event) =&gt; {
+            const data = apply(getMessageData, event, []);
+            if (typeof data === &quot;object&quot; &amp;&amp; data?.type === &quot;measure&quot;) {
+              sendHeight();
+            } else if (
+              typeof data === &quot;object&quot; &amp;&amp;
+              data?.type === &quot;widget-state-result&quot;
+            ) {
+              /** @type {unknown} */
+              const id = data.id;
+              if (typeof id !== &quot;number&quot;) {
+                return;
+              }
+              const pending = pendingStateWrites.get(id);
+              if (pending != null) {
+                pendingStateWrites.delete(id);
+                globalThis.clearTimeout(pending.timeout);
+                if (data.ok === true) {
+                  pending.resolve();
+                } else {
+                  pending.reject(persistenceError());
+                }
+              }
+            }
+          },
+        ]);
+        apply(startHostPort, nextHostPort, []);
+      } catch {
+        return;
+      }
+      hostPort = nextHostPort;
+      for (const [id, { serializedState }] of pendingStateWrites) {
+        postToHost(&quot;widget-state-write&quot;, { id, state: serializedState });
+      }
+      sendHeight();
+    },
+    { capture: true },
+  );
+  document.currentScript?.remove();
+  mediaQuery.addEventListener(&quot;change&quot;, syncTheme);
+  globalThis.addEventListener(&quot;click&quot;, (event) =&gt; {
+    if (event.defaultPrevented) {
+      return;
+    }
+    let element = null;
+    if (event.target instanceof globalThis.Element) {
+      element = event.target;
+    } else if (event.target instanceof globalThis.Node) {
+      element = event.target.parentElement;
+    }
+    const link = element?.closest(&quot;a[href]&quot;);
+    const href = link?.getAttribute(&quot;href&quot;);
+    if (href == null) {
+      return;
+    }
+    if (href.startsWith(&quot;#&quot;)) {
+      let id;
+      try {
+        id = decodeURIComponent(href.slice(1));
+      } catch {
+        return;
+      }
+      const target = id.length === 0 ? root : document.getElementById(id);
+      if (
+        target == null ||
+        globalThis.navigator.userActivation?.isActive !== true
+      ) {
+        return;
+      }
+      event.preventDefault();
+      postToHost(&quot;scroll-to&quot;, {
+        top: target.getBoundingClientRect().top + globalThis.scrollY,
+      });
+      return;
+    }
+    event.preventDefault();
+    openExternal({ href });
+  });
+  new ResizeObserver(sendHeight).observe(document.body);
+  syncTheme();
+})();
+&lt;/script&gt;
+&lt;style&gt;
+#branchwood-sketch { --bw-wall: light-dark(#e8e9de,#202b32); --bw-paper: light-dark(#faf8f1,#253038); --bw-panel: light-dark(#f0eee5,#202a31); --bw-ink: light-dark(#303d34,#e6ecde); --bw-soft: light-dark(#697466,#aab7a8); --bw-line: light-dark(#d9dccd,#3e4c4c); --bw-green: light-dark(#507347,#9ab981); --bw-ready: light-dark(#446d3f,#94c17e); --bw-red: light-dark(#a24d3a,#e6987b); --bw-gold: light-dark(#ac783b,#d8ac6f); --bw-blue: light-dark(#597d8c,#9abcc7); --bw-shadow: light-dark(#66715122,#0a111a55); --bw-grass: light-dark(#a8b88b,#758d73); --bw-grass2: light-dark(#b5c397,#82977b); --bw-grass3: light-dark(#a0b083,#6c836d); --bw-earth: light-dark(#a89a77,#6c6b58); --bw-earthdark: light-dark(#887f63,#555d50); --bw-path: light-dark(#ddd0a7,#b3b08c); --bw-cream: light-dark(#f4e1b4,#d0c5a7); --bw-wallshade: light-dark(#cbb68c,#9e9d84); --bw-roof: light-dark(#b77357,#b17d68); --bw-roofshade: light-dark(#8d5446,#805c54); --bw-tree: light-dark(#547957,#476d59); --bw-treelight: light-dark(#78986a,#688971); --bw-trunk: light-dark(#8b7557,#7a7260); --bw-water: light-dark(#97b7b2,#6e999b); color:var(--bw-ink); font:14px/1.5 -apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,sans-serif; width:100%; color-scheme:light dark; }
+#branchwood-sketch * { box-sizing:border-box; }
+#branchwood-sketch button { font:inherit; color:inherit; }
+#branchwood-sketch button:focus-visible { outline:3px solid var(--bw-blue); outline-offset:3px; }
+#branchwood-sketch [hidden] { display:none!important; }
+#branchwood-sketch .bw-desktop { position:relative; min-height:710px; background:var(--bw-wall); border-radius:16px; overflow:hidden; }
+#branchwood-sketch .bw-menubar { display:flex; align-items:center; gap:20px; padding:10px 22px; background:color-mix(in srgb,var(--bw-paper) 72%,transparent); border-bottom:1px solid var(--bw-line); font-size:12px; }
+#branchwood-sketch .bw-menubar strong { font-weight:600; }
+#branchwood-sketch .bw-menubar .bw-clock { margin-left:auto; }
+#branchwood-sketch .bw-background { position:absolute; inset:42px 0 0; background:radial-gradient(ellipse at 15% 70%,color-mix(in srgb,var(--bw-grass) 28%,transparent),transparent 65%),radial-gradient(ellipse at 95% 10%,color-mix(in srgb,var(--bw-water) 25%,transparent),transparent 65%); pointer-events:none; }
+#branchwood-sketch .bw-desktop-label { position:relative; display:flex; align-items:center; justify-content:space-between; gap:10px; padding:22px 28px 16px; }
+#branchwood-sketch .bw-eyebrow { font:11px/1.5 ui-monospace,SFMono-Regular,monospace; text-transform:uppercase; letter-spacing:.12em; color:var(--bw-soft); }
+#branchwood-sketch .bw-modes { display:flex; gap:3px; background:var(--bw-paper); border:1px solid var(--bw-line); padding:3px; border-radius:10px; }
+#branchwood-sketch .bw-modes button { border:0; background:transparent; border-radius:7px; padding:6px 13px; font-size:12px; }
+#branchwood-sketch .bw-modes button[aria-pressed=true] { background:var(--bw-ink); color:var(--bw-paper); }
+#branchwood-sketch .bw-window { position:relative; margin:0 26px 26px; background:var(--bw-paper); border:1px solid var(--bw-line); border-radius:15px; box-shadow:0 18px 44px var(--bw-shadow); overflow:hidden; }
+#branchwood-sketch .bw-titlebar { display:flex; align-items:center; gap:12px; padding:17px 20px; border-bottom:1px solid var(--bw-line); }
+#branchwood-sketch .bw-brand { display:flex; align-items:center; gap:9px; font-family:Georgia,&quot;Times New Roman&quot;,serif; font-size:23px; letter-spacing:-.6px; }
+#branchwood-sketch .bw-brand i { width:19px; height:19px; color:var(--bw-green); }
+#branchwood-sketch .bw-repo { font:11px ui-monospace,SFMono-Regular,monospace; color:var(--bw-soft); margin-left:5px; }
+#branchwood-sketch .bw-demo { margin-left:auto; color:var(--bw-soft); font-size:11px; display:flex; align-items:center; gap:6px; }
+#branchwood-sketch .bw-dot { width:6px; height:6px; border-radius:50%; display:inline-block; background:var(--bw-green); }
+#branchwood-sketch .bw-main { display:grid; grid-template-columns:minmax(0,1fr) 274px; }
+#branchwood-sketch .bw-map-side { min-width:0; }
+#branchwood-sketch .bw-map-head { display:flex; justify-content:space-between; gap:8px; padding:17px 20px 0; color:var(--bw-soft); font-size:12px; }
+#branchwood-sketch .bw-map-head strong { color:var(--bw-ink); font-weight:500; }
+#branchwood-sketch .bw-scene { position:relative; width:100%; }
+#branchwood-sketch canvas { display:block; width:100%; aspect-ratio:1.4; image-rendering:pixelated; touch-action:manipulation; }
+#branchwood-sketch .bw-streets { display:flex; gap:7px; flex-wrap:wrap; justify-content:center; padding:0 14px 16px; }
+#branchwood-sketch .bw-street { display:flex; flex-direction:column; gap:1px; text-align:left; border:1px solid var(--bw-line); background:transparent; border-radius:7px; padding:7px 9px; font-size:11px; }
+#branchwood-sketch .bw-street[aria-pressed=true] { border-color:var(--bw-green); background:color-mix(in srgb,var(--bw-green) 8%,var(--bw-paper)); }
+#branchwood-sketch .bw-street span { color:var(--bw-soft); font-size:11px; }
+#branchwood-sketch .bw-legend { display:flex; align-items:center; justify-content:center; gap:13px; flex-wrap:wrap; padding:11px 14px; border-top:1px solid var(--bw-line); font-size:11px; color:var(--bw-soft); }
+#branchwood-sketch .bw-key { display:flex; align-items:center; gap:5px; }
+#branchwood-sketch .bw-key b { width:7px; height:7px; background:var(--bw-green); display:block; }
+#branchwood-sketch .bw-key[data-state=failed] b { background:var(--bw-red); }
+#branchwood-sketch .bw-key[data-state=running] b { background:var(--bw-blue); }
+#branchwood-sketch .bw-key[data-state=review] b { background:var(--bw-gold); }
+#branchwood-sketch .bw-inspector { border-left:1px solid var(--bw-line); padding:20px 18px; min-width:0; background:var(--bw-panel); }
+#branchwood-sketch .bw-inspector h2 { font-family:Georgia,&quot;Times New Roman&quot;,serif; font-size:23px; line-height:1.2; font-weight:400; margin:8px 0 5px; letter-spacing:-.4px; }
+#branchwood-sketch .bw-description { margin:0 0 15px; color:var(--bw-soft); font-size:12px; }
+#branchwood-sketch .bw-stack-status { display:flex; align-items:center; gap:7px; font-size:12px; margin-bottom:18px; }
+#branchwood-sketch .bw-stack-status i { width:14px; height:14px; }
+#branchwood-sketch .bw-stack-list { display:grid; gap:0; }
+#branchwood-sketch .bw-pr { position:relative; width:100%; border:0; padding:11px 9px 11px 24px; text-align:left; background:transparent; border-radius:7px; }
+#branchwood-sketch .bw-pr + .bw-pr:before { content:&quot;&quot;; position:absolute; left:9px; top:-10px; width:1px; height:20px; background:var(--bw-line); }
+#branchwood-sketch .bw-pr[aria-pressed=true] { background:var(--bw-paper); box-shadow:0 1px 4px var(--bw-shadow); }
+#branchwood-sketch .bw-pr:after { content:&quot;&quot;; position:absolute; left:6px; top:19px; width:7px; height:7px; background:var(--bw-green); border-radius:2px; }
+#branchwood-sketch .bw-pr[data-state=failed]:after { background:var(--bw-red); }
+#branchwood-sketch .bw-pr[data-state=running]:after { background:var(--bw-blue); }
+#branchwood-sketch .bw-pr[data-state=review]:after { background:var(--bw-gold); }
+#branchwood-sketch .bw-pr[data-state=draft]:after { background:var(--bw-soft); }
+#branchwood-sketch .bw-pr-title { font-size:12px; display:block; font-weight:500; }
+#branchwood-sketch .bw-pr-meta { font-size:11px; color:var(--bw-soft); display:block; margin-top:2px; }
+#branchwood-sketch .bw-detail { border-top:1px solid var(--bw-line); margin-top:15px; padding-top:14px; }
+#branchwood-sketch .bw-detail-title { font-size:12px; font-weight:500; }
+#branchwood-sketch .bw-check { display:flex; justify-content:space-between; gap:8px; padding-top:9px; font-size:11px; color:var(--bw-soft); }
+#branchwood-sketch .bw-check strong { color:var(--bw-ink); font-weight:500; }
+#branchwood-sketch .bw-next { margin-top:17px; padding-top:12px; border-top:1px solid var(--bw-line); font-size:12px; }
+#branchwood-sketch .bw-next p { margin:5px 0 0; color:var(--bw-soft); }
+#branchwood-sketch .bw-bottom { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:13px 19px; border-top:1px solid var(--bw-line); font-size:12px; }
+#branchwood-sketch .bw-bottom-status { display:flex; align-items:center; gap:8px; min-width:0; }
+#branchwood-sketch .bw-action { border:0; background:var(--bw-ink); color:var(--bw-paper); border-radius:7px; padding:8px 12px; white-space:nowrap; font-size:12px; }
+#branchwood-sketch .bw-action:disabled { opacity:.5; }
+#branchwood-sketch .bw-sample { display:flex; justify-content:space-between; gap:12px; padding:0 28px 20px; color:var(--bw-soft); font-size:11px; }
+#branchwood-sketch .bw-terminal { display:none; position:absolute; left:35px; top:115px; width:48%; padding:17px 21px 23px; border:1px solid var(--bw-line); border-radius:11px; background:color-mix(in srgb,var(--bw-paper) 80%,transparent); color:var(--bw-soft); box-shadow:0 8px 24px var(--bw-shadow); }
+#branchwood-sketch .bw-terminal-title { display:flex; justify-content:space-between; margin-bottom:26px; font-size:11px; }
+#branchwood-sketch .bw-terminal pre { font:12px/1.9 ui-monospace,SFMono-Regular,monospace; white-space:pre-wrap; margin:0; }
+#branchwood-sketch .bw-terminal pre strong { color:var(--bw-ink); font-weight:500; }
+#branchwood-sketch .bw-toast { display:none; position:absolute; right:27px; top:105px; width:290px; padding:12px 14px; background:var(--bw-paper); border:1px solid var(--bw-line); border-radius:12px; box-shadow:0 8px 24px var(--bw-shadow); }
+#branchwood-sketch .bw-toast div { font-size:11px; color:var(--bw-soft); margin-bottom:3px; }
+#branchwood-sketch .bw-toast strong { font-size:12px; font-weight:500; }
+#branchwood-sketch[data-mode=desktop] .bw-terminal { display:block; }
+#branchwood-sketch[data-mode=desktop] .bw-toast { display:block; }
+#branchwood-sketch[data-mode=desktop] .bw-window { width:440px; max-width:calc(100% - 40px); margin:226px 20px 20px auto; background:transparent; box-shadow:none; border:0; overflow:visible; }
+#branchwood-sketch[data-mode=desktop] .bw-titlebar { padding:0 12px; border:0; }
+#branchwood-sketch[data-mode=desktop] .bw-brand { font-size:18px; }
+#branchwood-sketch[data-mode=desktop] .bw-repo, #branchwood-sketch[data-mode=desktop] .bw-demo, #branchwood-sketch[data-mode=desktop] .bw-inspector, #branchwood-sketch[data-mode=desktop] .bw-map-head, #branchwood-sketch[data-mode=desktop] .bw-streets, #branchwood-sketch[data-mode=desktop] .bw-legend { display:none; }
+#branchwood-sketch[data-mode=desktop] .bw-main { display:block; }
+#branchwood-sketch[data-mode=desktop] .bw-bottom { padding:9px 12px; border:1px solid var(--bw-line); border-radius:9px; background:var(--bw-paper); }
+#branchwood-sketch[data-mode=desktop] .bw-bottom-status { font-size:11px; }
+#branchwood-sketch[data-mode=desktop] .bw-sample { padding-bottom:18px; }
+@media(max-width:760px) { #branchwood-sketch .bw-main { grid-template-columns:minmax(0,1fr) 235px; } #branchwood-sketch .bw-window { margin:0 15px 20px; } #branchwood-sketch .bw-inspector { padding:17px 13px; } #branchwood-sketch .bw-repo { display:none; } }
+@media(max-width:580px) { #branchwood-sketch .bw-main { grid-template-columns:1fr; } #branchwood-sketch .bw-inspector { border-left:0; border-top:1px solid var(--bw-line); } #branchwood-sketch .bw-stack-list { grid-template-columns:repeat(3,minmax(0,1fr)); gap:5px; } #branchwood-sketch .bw-pr { padding:9px 5px 9px 18px; } #branchwood-sketch .bw-pr + .bw-pr:before { display:none; } #branchwood-sketch .bw-pr:after { left:4px; top:16px; width:6px; height:6px; } #branchwood-sketch .bw-desktop-label { padding:15px; flex-wrap:wrap; } #branchwood-sketch .bw-titlebar { padding:13px; } #branchwood-sketch .bw-demo { font-size:10px; } #branchwood-sketch .bw-bottom { align-items:flex-start; flex-direction:column; } #branchwood-sketch .bw-menubar { padding:9px 14px; gap:12px; } #branchwood-sketch .bw-menubar .bw-menu-extra { display:none; } #branchwood-sketch .bw-sample { padding:0 15px 15px; flex-wrap:wrap; } #branchwood-sketch .bw-terminal { left:18px; top:128px; width:calc(100% - 36px); } #branchwood-sketch .bw-terminal pre { font-size:11px; } #branchwood-sketch .bw-toast { right:18px; top:307px; width:calc(100% - 36px); } #branchwood-sketch[data-mode=desktop] .bw-window { margin-top:340px; } #branchwood-sketch .bw-map-head { flex-wrap:wrap; } }
+&lt;/style&gt;
+
+&lt;div id=&quot;branchwood-sketch&quot; data-mode=&quot;inspect&quot; aria-label=&quot;Branchwood PR village concept&quot;&gt;
+  &lt;div class=&quot;bw-desktop&quot;&gt;
+    &lt;div class=&quot;bw-menubar&quot;&gt;&lt;strong&gt;⌘&lt;/strong&gt;&lt;strong&gt;Branchwood&lt;/strong&gt;&lt;span&gt;Village&lt;/span&gt;&lt;span class=&quot;bw-menu-extra&quot;&gt;Stacks&lt;/span&gt;&lt;span class=&quot;bw-clock&quot;&gt;Tue 9:41&lt;/span&gt;&lt;/div&gt;
+    &lt;div class=&quot;bw-background&quot; aria-hidden=&quot;true&quot;&gt;&lt;/div&gt;
+    &lt;div class=&quot;bw-desktop-label&quot;&gt;&lt;span class=&quot;bw-eyebrow&quot;&gt;A little town for work in flight&lt;/span&gt;&lt;div class=&quot;bw-modes&quot; aria-label=&quot;Display mode&quot;&gt;&lt;button type=&quot;button&quot; class=&quot;cursor-interaction&quot; data-mode=&quot;desktop&quot; aria-pressed=&quot;false&quot;&gt;Desktop&lt;/button&gt;&lt;button type=&quot;button&quot; class=&quot;cursor-interaction&quot; data-mode=&quot;inspect&quot; aria-pressed=&quot;true&quot;&gt;Inspect village&lt;/button&gt;&lt;/div&gt;&lt;/div&gt;
+    &lt;div class=&quot;bw-terminal&quot; aria-hidden=&quot;true&quot;&gt;&lt;div class=&quot;bw-terminal-title&quot;&gt;&lt;span&gt;● ● ●&lt;/span&gt;&lt;span&gt;app — codex&lt;/span&gt;&lt;/div&gt;&lt;pre&gt;&lt;strong&gt;~/Projects/app&lt;/strong&gt;  feature/billing
+
+› finish the billing migration
+
+  ✓ schema updated
+  ✓ backfill added
+  ◦ waiting for checks…
+
+  &lt;strong&gt;Good place to leave it.&lt;/strong&gt;&lt;/pre&gt;&lt;/div&gt;
+    &lt;div class=&quot;bw-toast&quot; role=&quot;status&quot;&gt;&lt;div&gt;BRANCHWOOD · JUST NOW&lt;/div&gt;&lt;strong id=&quot;bw-toast-text&quot;&gt;Kitty polish is ready to merge.&lt;/strong&gt;&lt;/div&gt;
+    &lt;section class=&quot;bw-window&quot; aria-label=&quot;PR village&quot;&gt;
+      &lt;div class=&quot;bw-titlebar&quot;&gt;&lt;div class=&quot;bw-brand&quot;&gt;&lt;i data-lucide=&quot;trees&quot; aria-hidden=&quot;true&quot;&gt;&lt;/i&gt;Branchwood&lt;/div&gt;&lt;span class=&quot;bw-repo&quot;&gt;fattimo / app + clawdex&lt;/span&gt;&lt;span class=&quot;bw-demo&quot;&gt;&lt;span class=&quot;bw-dot&quot;&gt;&lt;/span&gt;Illustrative data&lt;/span&gt;&lt;/div&gt;
+      &lt;div class=&quot;bw-main&quot;&gt;
+        &lt;div class=&quot;bw-map-side&quot;&gt;
+          &lt;div class=&quot;bw-map-head&quot;&gt;&lt;span&gt;&lt;strong id=&quot;bw-count&quot;&gt;7 PRs&lt;/strong&gt; · 3 streets&lt;/span&gt;&lt;span id=&quot;bw-map-status&quot;&gt;1 stack ready · 1 needs you&lt;/span&gt;&lt;/div&gt;
+          &lt;div class=&quot;bw-scene&quot;&gt;&lt;canvas id=&quot;bw-world&quot; class=&quot;cursor-interaction&quot; role=&quot;img&quot; aria-label=&quot;Isometric village of seven PR cottages on three streets. Select a cottage or choose a street below to inspect its stack.&quot;&gt;PR village: Billing rollout has one failed check, Search refresh awaits review, and Kitty polish is ready to merge.&lt;/canvas&gt;&lt;/div&gt;
+          &lt;div class=&quot;bw-streets&quot; aria-label=&quot;PR stacks&quot;&gt;&lt;button class=&quot;bw-street cursor-interaction&quot; type=&quot;button&quot; data-stack=&quot;billing&quot; aria-pressed=&quot;true&quot;&gt;Billing rollout&lt;span id=&quot;bw-billing-count&quot;&gt;1 blocker · 3 PRs&lt;/span&gt;&lt;/button&gt;&lt;button class=&quot;bw-street cursor-interaction&quot; type=&quot;button&quot; data-stack=&quot;search&quot; aria-pressed=&quot;false&quot;&gt;Search refresh&lt;span&gt;In review · 2 PRs&lt;/span&gt;&lt;/button&gt;&lt;button class=&quot;bw-street cursor-interaction&quot; type=&quot;button&quot; data-stack=&quot;kitty&quot; aria-pressed=&quot;false&quot;&gt;Kitty polish&lt;span id=&quot;bw-kitty-count&quot;&gt;Ready · 2 PRs&lt;/span&gt;&lt;/button&gt;&lt;/div&gt;
+          &lt;div class=&quot;bw-legend&quot;&gt;&lt;span class=&quot;bw-key&quot;&gt;&lt;b&gt;&lt;/b&gt;Ready&lt;/span&gt;&lt;span class=&quot;bw-key&quot; data-state=&quot;running&quot;&gt;&lt;b&gt;&lt;/b&gt;Checks running&lt;/span&gt;&lt;span class=&quot;bw-key&quot; data-state=&quot;failed&quot;&gt;&lt;b&gt;&lt;/b&gt;Needs you&lt;/span&gt;&lt;span class=&quot;bw-key&quot; data-state=&quot;review&quot;&gt;&lt;b&gt;&lt;/b&gt;Review&lt;/span&gt;&lt;span&gt;Paths = stack order&lt;/span&gt;&lt;/div&gt;
+        &lt;/div&gt;
+        &lt;aside class=&quot;bw-inspector&quot; aria-label=&quot;Selected stack details&quot;&gt;&lt;div class=&quot;bw-eyebrow&quot; id=&quot;bw-stack-repo&quot;&gt;app / stack 01&lt;/div&gt;&lt;h2 id=&quot;bw-stack-name&quot;&gt;Billing rollout&lt;/h2&gt;&lt;p class=&quot;bw-description&quot; id=&quot;bw-stack-description&quot;&gt;Three changes, one release.&lt;/p&gt;&lt;div class=&quot;bw-stack-status&quot; id=&quot;bw-stack-status&quot;&gt;&lt;/div&gt;&lt;div class=&quot;bw-stack-list&quot; id=&quot;bw-pr-list&quot; aria-label=&quot;Pull requests, base to tip&quot;&gt;&lt;/div&gt;&lt;div class=&quot;bw-detail&quot; aria-live=&quot;polite&quot;&gt;&lt;div class=&quot;bw-detail-title&quot; id=&quot;bw-detail-title&quot;&gt;&lt;/div&gt;&lt;div id=&quot;bw-checks&quot;&gt;&lt;/div&gt;&lt;div class=&quot;bw-next&quot;&gt;&lt;span class=&quot;bw-eyebrow&quot;&gt;Next step&lt;/span&gt;&lt;p id=&quot;bw-next-step&quot;&gt;&lt;/p&gt;&lt;/div&gt;&lt;/div&gt;&lt;/aside&gt;
+      &lt;/div&gt;
+      &lt;div class=&quot;bw-bottom&quot;&gt;&lt;div class=&quot;bw-bottom-status&quot; aria-live=&quot;polite&quot;&gt;&lt;span class=&quot;bw-dot&quot;&gt;&lt;/span&gt;&lt;span id=&quot;bw-notice&quot;&gt;Kitty polish is ready to merge.&lt;/span&gt;&lt;/div&gt;&lt;button type=&quot;button&quot; id=&quot;bw-demo-action&quot; class=&quot;bw-action cursor-interaction&quot;&gt;Finish billing checks · demo&lt;/button&gt;&lt;/div&gt;
+    &lt;/section&gt;
+    &lt;div class=&quot;bw-sample&quot;&gt;&lt;span&gt;Each cottage is a PR. Each street is a stack.&lt;/span&gt;&lt;span&gt;Local concept · no GitHub connection&lt;/span&gt;&lt;/div&gt;
+  &lt;/div&gt;
+&lt;/div&gt;
+
+&lt;script&gt;
+(() =&gt; {
+  const root = document.getElementById(&#x27;branchwood-sketch&#x27;);
+  const canvas = root.querySelector(&#x27;#bw-world&#x27;);
+  const ctx = canvas.getContext(&#x27;2d&#x27;);
+  const q = id =&gt; root.querySelector(&#x27;#&#x27; + id);
+  const stacks = {
+    billing: { name:&#x27;Billing rollout&#x27;, repo:&#x27;app / stack 01&#x27;, description:&#x27;Three changes, one release.&#x27;, ids:[8121,8122,8123] },
+    search: { name:&#x27;Search refresh&#x27;, repo:&#x27;app / stack 02&#x27;, description:&#x27;A faster way to find things.&#x27;, ids:[8104,8105] },
+    kitty: { name:&#x27;Kitty polish&#x27;, repo:&#x27;clawdex / stack 03&#x27;, description:&#x27;The last stretch before shipping.&#x27;, ids:[8098,8099] }
+  };
+  const prs = [
+    {id:8121,stack:&#x27;billing&#x27;,name:&#x27;Billing schema&#x27;,state:&#x27;ready&#x27;,i:2,j:2},
+    {id:8122,stack:&#x27;billing&#x27;,name:&#x27;Account backfill&#x27;,state:&#x27;failed&#x27;,i:4,j:2},
+    {id:8123,stack:&#x27;billing&#x27;,name:&#x27;Enable new flow&#x27;,state:&#x27;running&#x27;,i:6,j:2},
+    {id:8104,stack:&#x27;search&#x27;,name:&#x27;Search index&#x27;,state:&#x27;review&#x27;,i:2,j:5},
+    {id:8105,stack:&#x27;search&#x27;,name:&#x27;Search UI&#x27;,state:&#x27;draft&#x27;,i:4,j:5},
+    {id:8098,stack:&#x27;kitty&#x27;,name:&#x27;Tab resolver&#x27;,state:&#x27;merged&#x27;,i:7,j:5},
+    {id:8099,stack:&#x27;kitty&#x27;,name:&#x27;Focus the client&#x27;,state:&#x27;ready&#x27;,i:9,j:5}
+  ];
+  const labels = { ready:&#x27;Ready to merge&#x27;, failed:&#x27;1 check failed&#x27;, running:&#x27;Checks running&#x27;, review:&#x27;Review requested&#x27;, draft:&#x27;Draft&#x27;, merged:&#x27;Merged&#x27; };
+  const originalStates = new Map(prs.map(p =&gt; [p.id,p.state]));
+  const state = { stack:&#x27;billing&#x27;, selected:8122, mode:&#x27;inspect&#x27;, completed:false, merged:[] };
+  const appearance = { paths:true, greenery:true, lanterns:true };
+  let hitBoxes = [];
+  let worldScale = 1;
+  let palette = {};
+  function byId(id) { return prs.find(p =&gt; p.id === id); }
+  function readyStack(key) { return stacks[key].ids.every(id =&gt; [&#x27;ready&#x27;,&#x27;merged&#x27;].includes(byId(id).state)); }
+  function remaining(key) { return stacks[key].ids.filter(id =&gt; byId(id).state !== &#x27;merged&#x27;); }
+  function restore(saved) {
+    const data = saved?.privateContent;
+    if (!data || typeof data !== &#x27;object&#x27;) return;
+    if (Object.hasOwn(stacks,data.stack)) state.stack = data.stack;
+    if (stacks[state.stack].ids.includes(data.selected)) state.selected = data.selected;
+    else state.selected = stacks[state.stack].ids[0];
+    if ([&#x27;desktop&#x27;,&#x27;inspect&#x27;].includes(data.mode)) state.mode = data.mode;
+    state.completed = data.completed === true;
+    state.merged = Array.isArray(data.merged) ? data.merged.filter(id =&gt; prs.some(p =&gt; p.id === id &amp;&amp; p.stack !== &#x27;search&#x27;)) : [];
+    for (const p of prs) {
+      p.state = originalStates.get(p.id);
+      if (state.completed &amp;&amp; p.stack === &#x27;billing&#x27;) p.state = &#x27;ready&#x27;;
+      if (state.merged.includes(p.id)) p.state = &#x27;merged&#x27;;
+    }
+  }
+  function save() {
+    if (window.openai?.setWidgetState) window.openai.setWidgetState({modelContent:{concept:&#x27;Branchwood PR village&#x27;,display:state.mode,selectedStack:stacks[state.stack].name},privateContent:{...state}}).catch(() =&gt; {});
+  }
+  function choose(id) {
+    const p = byId(id); if (!p) return;
+    state.selected = id; state.stack = p.stack;
+    if (state.mode === &#x27;desktop&#x27;) state.mode = &#x27;inspect&#x27;;
+    render(); save();
+  }
+  function line(label,value) {
+    const row = document.createElement(&#x27;div&#x27;); row.className = &#x27;bw-check&#x27;;
+    const a = document.createElement(&#x27;span&#x27;); a.textContent = label;
+    const b = document.createElement(&#x27;strong&#x27;); b.textContent = value;
+    row.append(a,b); return row;
+  }
+  function render() {
+    root.dataset.mode = state.mode;
+    root.querySelectorAll(&#x27;.bw-modes button&#x27;).forEach(b =&gt; b.setAttribute(&#x27;aria-pressed&#x27;,String(b.dataset.mode === state.mode)));
+    root.querySelectorAll(&#x27;[data-stack]&#x27;).forEach(b =&gt; b.setAttribute(&#x27;aria-pressed&#x27;,String(b.dataset.stack === state.stack)));
+    const stack = stacks[state.stack];
+    const p = byId(state.selected);
+    q(&#x27;bw-stack-name&#x27;).textContent = stack.name;
+    q(&#x27;bw-stack-repo&#x27;).textContent = stack.repo;
+    q(&#x27;bw-stack-description&#x27;).textContent = stack.description;
+    const allMerged = remaining(state.stack).length === 0;
+    q(&#x27;bw-stack-status&#x27;).textContent = allMerged ? &#x27;✓ Entire stack merged&#x27; : readyStack(state.stack) ? &#x27;✓ Entire stack ready&#x27; : state.stack === &#x27;billing&#x27; ? &#x27;× Stack blocked by #8122&#x27; : &#x27;◦ Review before merging&#x27;;
+    q(&#x27;bw-stack-status&#x27;).style.color = readyStack(state.stack) ? &#x27;var(--bw-ready)&#x27; : state.stack === &#x27;billing&#x27; ? &#x27;var(--bw-red)&#x27; : &#x27;var(--bw-gold)&#x27;;
+    q(&#x27;bw-pr-list&#x27;).replaceChildren();
+    stack.ids.forEach((id,index) =&gt; {
+      const item = byId(id); const button = document.createElement(&#x27;button&#x27;);
+      button.className = &#x27;bw-pr cursor-interaction&#x27;; button.type = &#x27;button&#x27;; button.dataset.state = item.state;
+      button.setAttribute(&#x27;aria-pressed&#x27;,String(id === state.selected));
+      button.setAttribute(&#x27;aria-label&#x27;,`PR ${id}: ${item.name}. ${labels[item.state]}. ${index === 0 ? &#x27;Base of stack&#x27; : &#x27;Depends on PR &#x27; + stack.ids[index-1]}`);
+      const title = document.createElement(&#x27;span&#x27;); title.className=&#x27;bw-pr-title&#x27;; title.textContent=item.name;
+      const meta = document.createElement(&#x27;span&#x27;); meta.className=&#x27;bw-pr-meta&#x27;; meta.textContent=`#${id} · ${labels[item.state]}`;
+      button.append(title,meta); button.addEventListener(&#x27;click&#x27;,() =&gt; choose(id)); q(&#x27;bw-pr-list&#x27;).append(button);
+    });
+    q(&#x27;bw-detail-title&#x27;).textContent = `#${p.id} · ${p.name}`;
+    const checkValues = p.state === &#x27;failed&#x27; ? [[&#x27;Checks&#x27;,&#x27;11 / 12 passing&#x27;],[&#x27;Failed check&#x27;,&#x27;backfill.integration&#x27;],[&#x27;Reviews&#x27;,&#x27;Approved&#x27;],[&#x27;Conflicts&#x27;,&#x27;None&#x27;]] : p.state === &#x27;running&#x27; ? [[&#x27;Checks&#x27;,&#x27;8 / 12 complete&#x27;],[&#x27;Reviews&#x27;,&#x27;Approved&#x27;],[&#x27;Conflicts&#x27;,&#x27;None&#x27;]] : p.state === &#x27;review&#x27; ? [[&#x27;Checks&#x27;,&#x27;12 / 12 passing&#x27;],[&#x27;Reviews&#x27;,&#x27;1 requested&#x27;],[&#x27;Conflicts&#x27;,&#x27;None&#x27;]] : p.state === &#x27;draft&#x27; ? [[&#x27;Checks&#x27;,&#x27;Not started&#x27;],[&#x27;Reviews&#x27;,&#x27;Draft&#x27;],[&#x27;Conflicts&#x27;,&#x27;None&#x27;]] : [[&#x27;Checks&#x27;,&#x27;12 / 12 passing&#x27;],[&#x27;Reviews&#x27;,&#x27;Approved&#x27;],[&#x27;Conflicts&#x27;,&#x27;None&#x27;]];
+    q(&#x27;bw-checks&#x27;).replaceChildren(...checkValues.map(pair =&gt; line(...pair)));
+    const previous = stack.ids[stack.ids.indexOf(p.id)-1];
+    q(&#x27;bw-next-step&#x27;).textContent = p.state === &#x27;failed&#x27; ? &#x27;Fix the backfill integration check, then rerun CI.&#x27; : p.state === &#x27;running&#x27; ? &#x27;Wait for the remaining checks. We’ll watch for you.&#x27; : p.state === &#x27;review&#x27; ? &#x27;Waiting on a reviewer. No action needed yet.&#x27; : p.state === &#x27;draft&#x27; ? &#x27;Finish this change and request a review.&#x27; : p.state === &#x27;merged&#x27; ? &#x27;Shipped. The next cottage is ready when you are.&#x27; : previous &amp;&amp; byId(previous).state !== &#x27;merged&#x27; ? `Merge the stack from its base, starting with #${remaining(state.stack)[0]}.` : `Merge #${p.id}, then recheck the next PR in the stack.`;
+    const ready = Object.keys(stacks).filter(key =&gt; readyStack(key) &amp;&amp; remaining(key).length).length;
+    q(&#x27;bw-count&#x27;).textContent = `${prs.filter(p =&gt; p.state !== &#x27;merged&#x27;).length} open PRs`;
+    q(&#x27;bw-map-status&#x27;).textContent = `${ready} stack${ready === 1 ? &#x27;&#x27; : &#x27;s&#x27;} ready${state.completed ? &#x27;&#x27; : &#x27; · 1 needs you&#x27;}`;
+    q(&#x27;bw-billing-count&#x27;).textContent = remaining(&#x27;billing&#x27;).length === 0 ? &#x27;Merged · 3 PRs&#x27; : state.completed ? &#x27;Ready · 3 PRs&#x27; : &#x27;1 blocker · 3 PRs&#x27;;
+    q(&#x27;bw-kitty-count&#x27;).textContent = remaining(&#x27;kitty&#x27;).length ? &#x27;Ready · 2 PRs&#x27; : &#x27;Merged · 2 PRs&#x27;;
+    let notice = state.completed ? &#x27;Billing rollout is ready to merge.&#x27; : &#x27;Kitty polish is ready to merge.&#x27;;
+    if (allMerged) notice = `${stack.name} shipped. A street well built.`;
+    else if (state.merged.length) notice = `#${state.merged[state.merged.length-1]} merged. Your village is growing.`;
+    q(&#x27;bw-notice&#x27;).textContent = notice; q(&#x27;bw-toast-text&#x27;).textContent = notice;
+    const action = q(&#x27;bw-demo-action&#x27;);
+    if (state.mode === &#x27;desktop&#x27;) { action.textContent=&#x27;Inspect village&#x27;; action.disabled=false; }
+    else if (!state.completed) { action.textContent=&#x27;Finish billing checks · demo&#x27;; action.disabled=false; }
+    else if (readyStack(state.stack) &amp;&amp; !allMerged) { action.textContent=`Merge #${remaining(state.stack)[0]} · demo`; action.disabled=false; }
+    else { action.textContent=allMerged ? &#x27;Stack shipped&#x27; : &#x27;Waiting for review&#x27;; action.disabled=true; }
+    draw();
+  }
+  function color(name) { return getComputedStyle(root).getPropertyValue(&#x27;--bw-&#x27; + name).trim(); }
+  function loadPalette() {
+    // Resolve light-dark() to actual colors for the canvas API.
+    const probe = document.createElement(&#x27;span&#x27;); probe.hidden=true; root.append(probe);
+    for (const key of [&#x27;grass&#x27;,&#x27;grass2&#x27;,&#x27;grass3&#x27;,&#x27;earth&#x27;,&#x27;earthdark&#x27;,&#x27;path&#x27;,&#x27;cream&#x27;,&#x27;wallshade&#x27;,&#x27;roof&#x27;,&#x27;roofshade&#x27;,&#x27;tree&#x27;,&#x27;treelight&#x27;,&#x27;trunk&#x27;,&#x27;water&#x27;,&#x27;ink&#x27;,&#x27;soft&#x27;,&#x27;paper&#x27;,&#x27;green&#x27;,&#x27;ready&#x27;,&#x27;red&#x27;,&#x27;gold&#x27;,&#x27;blue&#x27;]) {
+      probe.style.color = `var(--bw-${key})`; palette[key] = getComputedStyle(probe).color;
+    }
+    probe.remove();
+  }
+  function iso(i,j) { return {x:296+(i-j)*25,y:79+(i+j)*12.5}; }
+  function poly(points,fill) { ctx.fillStyle=fill; ctx.beginPath(); points.forEach(([x,y],i)=&gt;i ? ctx.lineTo(x,y) : ctx.moveTo(x,y)); ctx.closePath(); ctx.fill(); }
+  function rect(x,y,w,h,fill) { ctx.fillStyle=fill; ctx.fillRect(x,y,w,h); }
+  function tile(i,j,fill) { const {x,y}=iso(i,j); poly([[x,y],[x+25,y+12.5],[x,y+25],[x-25,y+12.5]],fill); }
+  function diamond(x,y,w,h,fill) { poly([[x,y-h],[x+w,y],[x,y+h],[x-w,y]],fill); }
+  function tree(i,j,size=1) {
+    const {x,y}=iso(i,j); const s=size;
+    diamond(x+4,y+12,18*s,7*s,palette.grass3);
+    rect(x-3*s,y-18*s,6*s,28*s,palette.trunk);
+    poly([[x,y-63*s],[x+20*s,y-27*s],[x+8*s,y-21*s],[x+23*s,y-9*s],[x,y+2*s],[x-23*s,y-9*s],[x-8*s,y-21*s],[x-20*s,y-27*s]],palette.tree);
+    poly([[x,y-63*s],[x,y+2*s],[x-23*s,y-9*s],[x-8*s,y-21*s],[x-20*s,y-27*s]],palette.treelight);
+    rect(x-7*s,y-30*s,4*s,4*s,palette.grass2);
+  }
+  function house(p) {
+    const {x,y}=iso(p.i,p.j); const h=p.state===&#x27;draft&#x27;?20:34;
+    const isSelected=p.id===state.selected;
+    const tone=p.state===&#x27;failed&#x27;?palette.red:p.state===&#x27;running&#x27;?palette.blue:p.state===&#x27;review&#x27;||p.state===&#x27;draft&#x27;?palette.gold:palette.ready;
+    diamond(x+4,y+8,38,16,palette.grass3);
+    if(isSelected) {
+      ctx.strokeStyle=palette.ink; ctx.lineWidth=1.5;
+      ctx.beginPath(); ctx.moveTo(x,y-16); ctx.lineTo(x+36,y+2);ctx.lineTo(x,y+20);ctx.lineTo(x-36,y+2);ctx.closePath();ctx.stroke();
+    }
+    poly([[x-23,y-12],[x,y],[x,y-h],[x-23,y-h-12]],palette.wallshade);
+    poly([[x,y],[x+23,y-12],[x+23,y-h-12],[x,y-h]],palette.cream);
+    if(p.state===&#x27;draft&#x27;) {
+      for(let t=0;t&lt;3;t++) { rect(x-27+t*24,y-46,3,49,palette.trunk); }
+      for(let t=0;t&lt;2;t++) { rect(x-29,y-34+t*18,59,3,palette.trunk); }
+      poly([[x-27,y-40],[x,y-28],[x+27,y-41],[x,y-54]],palette.path);
+    } else {
+      const peak=[x+11.5,y-h-30]; const backPeak=[x-11.5,y-h-42];
+      poly([[x,y-h-24],[x+27,y-h-11],peak,backPeak],tone);
+      ctx.globalAlpha=.2;poly([[x,y-h-24],[x+27,y-h-11],peak,backPeak],palette.ink);ctx.globalAlpha=1;
+      poly([[x,y-h+2],[x+25,y-h-11],peak],palette.cream);
+      poly([[x-28,y-h-12],[x,y-h+2],peak,backPeak],p.state===&#x27;merged&#x27;?palette.tree:tone);
+      ctx.strokeStyle=palette.ink;ctx.lineWidth=1;ctx.globalAlpha=.2;
+      for(let t=1;t&lt;5;t++) { const f=t/5;ctx.beginPath();ctx.moveTo(x-28+16.5*f,y-h-12-30*f);ctx.lineTo(x+11.5*f,y-h+2-32*f);ctx.stroke(); }
+      ctx.globalAlpha=1;
+      rect(x-15,y-h-34,6,14,palette.wallshade);rect(x-17,y-h-36,10,4,palette.cream);
+    }
+    poly([[x+7,y-3],[x+15,y-7],[x+15,y-24],[x+7,y-20]],palette.trunk);
+    rect(x+12,y-16,2,2,palette.cream);
+    const light=appearance.lanterns &amp;&amp; [&#x27;ready&#x27;,&#x27;merged&#x27;].includes(p.state)?palette.gold:palette.blue;
+    poly([[x-17,y-h+3],[x-8,y-h+7],[x-8,y-h+16],[x-17,y-h+12]],light);
+    rect(x-13,y-h+5,1,10,palette.wallshade);
+    rect(x+31,y-39,2,41,palette.trunk);
+    poly([[x+33,y-39],[x+48,y-39],[x+44,y-32],[x+33,y-32]],tone);
+    if(p.state===&#x27;failed&#x27;) { rect(x+37,y-38,2,4,palette.paper);rect(x+37,y-33,2,1,palette.paper); }
+    if(p.state===&#x27;ready&#x27;||p.state===&#x27;merged&#x27;) { rect(x+36,y-36,2,2,palette.paper);rect(x+38,y-34,2,2,palette.paper);rect(x+40,y-37,2,3,palette.paper); }
+    if(p.state===&#x27;review&#x27;) { rect(x+36,y-37,7,5,palette.paper);rect(x+38,y-35,3,1,tone); }
+    if(p.state===&#x27;running&#x27;) { rect(x+36,y-37,6,1,palette.paper);rect(x+38,y-36,2,3,palette.paper);rect(x+36,y-33,6,1,palette.paper); }
+    hitBoxes.push({id:p.id,x:x-29,y:y-h-46,w:81,h:h+64});
+  }
+  function draw() {
+    const width=canvas.getBoundingClientRect().width;if(!width)return;
+    canvas.width=Math.max(1,Math.round(width/2));canvas.height=Math.round(width/1.4/2);
+    loadPalette();worldScale=width/620;
+    ctx.setTransform(canvas.width/620,0,0,canvas.width/620,0,0);ctx.imageSmoothingEnabled=false;
+    ctx.clearRect(0,0,620,450);hitBoxes=[];
+    const a=iso(0,0),b=iso(11,0),c=iso(11,8),d=iso(0,8);
+    ctx.globalAlpha=.16;diamond(339,337,208,40,palette.ink);ctx.globalAlpha=1;
+    poly([[d.x,d.y],[c.x,c.y],[c.x,c.y+23],[d.x,d.y+23]],palette.earthdark);
+    poly([[b.x,b.y],[c.x,c.y],[c.x,c.y+23],[b.x,b.y+23]],palette.earth);
+    for(let i=0;i&lt;11;i++) for(let j=0;j&lt;8;j++) {
+      const path=appearance.paths&amp;&amp;(j===3||j===6||i===0);
+      const creek=(i&gt;=9&amp;&amp;j&gt;=6)||(i&gt;=10&amp;&amp;j&gt;=4);
+      tile(i,j,creek?palette.water:path?palette.path:palette[[&#x27;grass&#x27;,&#x27;grass2&#x27;,&#x27;grass3&#x27;][(i*7+j*3)%3]]);
+      if(!path&amp;&amp;!creek&amp;&amp;(i*13+j*7)%4===0) { const p=iso(i,j);rect(p.x-3,p.y+11,3,2,palette.grass2);rect(p.x+4,p.y+15,2,2,palette.grass3); }
+      if(creek) {const p=iso(i,j);rect(p.x-6,p.y+12,8,1,palette.paper);}
+    }
+    // Stepping stones connect each PR to its stack&#x27;s street.
+    if(appearance.paths) for(const p of prs) { const pos=iso(p.i,p.j+.75);diamond(pos.x,pos.y+6,12,5,palette.path); }
+    const objects=prs.map(p=&gt;({depth:p.i+p.j,draw:()=&gt;house(p)}));
+    if(appearance.greenery) for(const [i,j,s] of [[0,1,.65],[0,5,.8],[1,7,.8],[8,0,.8],[10,1,.7],[5,7,.65],[9,7,.65]]) objects.push({depth:i+j,draw:()=&gt;tree(i,j,s)});
+    // Small village well and notice board.
+    objects.push({depth:10,draw:()=&gt;{const p=iso(6,4);diamond(p.x,p.y+8,14,7,palette.wallshade);rect(p.x-10,p.y-3,20,10,palette.cream);rect(p.x-12,p.y-5,24,4,palette.earth);rect(p.x-10,p.y-24,2,20,palette.trunk);rect(p.x+9,p.y-24,2,20,palette.trunk);poly([[p.x-15,p.y-22],[p.x,p.y-30],[p.x+15,p.y-22],[p.x,p.y-15]],palette.roof);}});
+    objects.sort((a,b)=&gt;a.depth-b.depth).forEach(o=&gt;o.draw());
+    // Fence along the front edge; two tiny gardeners give the town scale.
+    for(let i=1;i&lt;9;i++) {const p=iso(i,7.75);rect(p.x,p.y+12,2,10,palette.trunk);}
+    for(const [i,j] of [[3,3],[7,6]]) {const p=iso(i,j);rect(p.x-2,p.y-3,5,5,palette.cream);rect(p.x-3,p.y+2,7,7,palette.blue);rect(p.x-3,p.y+9,2,4,palette.ink);rect(p.x+2,p.y+9,2,4,palette.ink);rect(p.x-3,p.y-5,7,2,palette.trunk);}
+    // Ready stacks get a lantern at the end of their path.
+    if(appearance.lanterns) for(const [key,i,j] of [[&#x27;billing&#x27;,7.4,3],[&#x27;kitty&#x27;,9.3,6],[&#x27;search&#x27;,5.4,6]]) {
+      if(!readyStack(key))continue;const p=iso(i,j);rect(p.x,p.y-28,2,31,palette.trunk);rect(p.x-4,p.y-32,10,10,palette.gold);rect(p.x-2,p.y-30,6,6,palette.cream);
+    }
+  }
+  root.querySelectorAll(&#x27;.bw-modes button&#x27;).forEach(button=&gt;button.addEventListener(&#x27;click&#x27;,()=&gt;{state.mode=button.dataset.mode;render();save();}));
+  root.querySelectorAll(&#x27;[data-stack]&#x27;).forEach(button=&gt;button.addEventListener(&#x27;click&#x27;,()=&gt;{
+    state.stack=button.dataset.stack;state.selected=stacks[state.stack].ids.find(id=&gt;![&#x27;ready&#x27;,&#x27;merged&#x27;].includes(byId(id).state))||remaining(state.stack)[0]||stacks[state.stack].ids[0];render();save();
+  }));
+  canvas.addEventListener(&#x27;click&#x27;,event=&gt;{
+    const rect=canvas.getBoundingClientRect();const x=(event.clientX-rect.left)/worldScale,y=(event.clientY-rect.top)/worldScale;
+    const hit=[...hitBoxes].reverse().find(b=&gt;x&gt;=b.x&amp;&amp;x&lt;=b.x+b.w&amp;&amp;y&gt;=b.y&amp;&amp;y&lt;=b.y+b.h);
+    if(hit)choose(hit.id);
+  });
+  q(&#x27;bw-demo-action&#x27;).addEventListener(&#x27;click&#x27;,()=&gt;{
+    if(state.mode===&#x27;desktop&#x27;)state.mode=&#x27;inspect&#x27;;
+    else if(!state.completed) {state.completed=true;state.stack=&#x27;billing&#x27;;state.selected=8122;prs.filter(p=&gt;p.stack===&#x27;billing&#x27;).forEach(p=&gt;p.state=&#x27;ready&#x27;);}
+    else if(readyStack(state.stack)&amp;&amp;remaining(state.stack).length) {const id=remaining(state.stack)[0];byId(id).state=&#x27;merged&#x27;;state.merged.push(id);state.selected=remaining(state.stack)[0]||id;}
+    render();save();
+  });
+  restore(window.openai?.widgetState);render();
+  new ResizeObserver(()=&gt;draw()).observe(canvas);
+  window.matchMedia(&#x27;(prefers-color-scheme: dark)&#x27;).addEventListener(&#x27;change&#x27;,()=&gt;draw());
+  window.addEventListener(&#x27;openai:set_globals&#x27;,event=&gt;{if(event.detail?.globals?.widgetState){restore(event.detail.globals.widgetState);render();}});
+  if(globalThis.Tweak) {
+    const tweak=new Tweak({container:root,onChange:draw});
+    tweak.addToggle(appearance,&#x27;paths&#x27;,{label:&#x27;Stack paths&#x27;});
+    tweak.addToggle(appearance,&#x27;greenery&#x27;,{label:&#x27;Trees &amp; greenery&#x27;});
+    tweak.addToggle(appearance,&#x27;lanterns&#x27;,{label:&#x27;Ready-stack lanterns&#x27;});
+  }
+})();
+&lt;/script&gt;
+
+&lt;script src=&quot;https://unpkg.com/@floating-ui/core@1.7.3/dist/floating-ui.core.umd.min.js&quot;&gt;&lt;/script&gt;
+&lt;script src=&quot;https://unpkg.com/@floating-ui/dom@1.7.4/dist/floating-ui.dom.umd.min.js&quot;&gt;&lt;/script&gt;
+&lt;script&gt;
+(() =&gt; {
+  if (window.FloatingUIDOM == null) {
+    return;
+  }
+  const { autoUpdate, computePosition, flip, offset, shift, size } =
+    window.FloatingUIDOM;
+  const tooltipPlacements = new Set([&quot;top&quot;, &quot;right&quot;, &quot;bottom&quot;, &quot;left&quot;]);
+  const tooltipId = `codex-visualization-tooltip-${
+    window.crypto?.randomUUID?.() ?? Date.now().toString(36)
+  }`;
+  const tooltipGap = 5;
+  const hoverDelay = 700;
+  const skipDelay = 300;
+  let activeTrigger = null;
+  let pendingTrigger = null;
+  let tooltip = null;
+  let openTimeout = null;
+  let autoUpdateCleanup = null;
+  let positionRequest = 0;
+  let skipDelayUntil = 0;
+  let lastPointerWasTouch = false;
+  let pinnedByTouch = false;
+
+  const getTrigger = (event) =&gt; {
+    for (const target of event.composedPath()) {
+      if (target?.nodeType === Node.ELEMENT_NODE) {
+        const trigger = target.closest(&quot;[data-tooltip]&quot;);
+        if (trigger) return trigger;
+      }
+    }
+    return null;
+  };
+  const containsTarget = (trigger, target) =&gt;
+    target?.nodeType != null &amp;&amp; trigger.contains(target);
+  const getContent = (trigger) =&gt;
+    trigger.getAttribute(&quot;data-tooltip&quot;)?.trim() ?? &quot;&quot;;
+  const getPlacement = (trigger) =&gt; {
+    const placement = trigger.getAttribute(&quot;data-tooltip-placement&quot;);
+    return tooltipPlacements.has(placement) ? placement : &quot;top&quot;;
+  };
+  const getTooltip = () =&gt; {
+    if (tooltip == null) {
+      tooltip = document.createElement(&quot;div&quot;);
+      tooltip.id = tooltipId;
+      tooltip.className = &quot;tooltip&quot;;
+      tooltip.setAttribute(&quot;role&quot;, &quot;tooltip&quot;);
+    }
+    return tooltip;
+  };
+  const setDescribedBy = (trigger, described) =&gt; {
+    const ids = new Set(
+      (trigger.getAttribute(&quot;aria-describedby&quot;) ?? &quot;&quot;)
+        .split(/\s+/)
+        .filter(Boolean),
+    );
+    if (described) {
+      ids.add(tooltipId);
+    } else {
+      ids.delete(tooltipId);
+    }
+    if (ids.size === 0) {
+      trigger.removeAttribute(&quot;aria-describedby&quot;);
+    } else {
+      trigger.setAttribute(&quot;aria-describedby&quot;, [...ids].join(&quot; &quot;));
+    }
+  };
+  const clearOpenTimeout = () =&gt; {
+    if (openTimeout != null) {
+      window.clearTimeout(openTimeout);
+      openTimeout = null;
+    }
+    pendingTrigger = null;
+  };
+  const closeTooltip = (activateSkipDelay = true) =&gt; {
+    clearOpenTimeout();
+    pinnedByTouch = false;
+    positionRequest += 1;
+    autoUpdateCleanup?.();
+    autoUpdateCleanup = null;
+    if (activeTrigger == null) {
+      return;
+    }
+    setDescribedBy(activeTrigger, false);
+    activeTrigger = null;
+    tooltip?.remove();
+    if (activateSkipDelay) {
+      skipDelayUntil = Date.now() + skipDelay;
+    }
+  };
+  const updatePosition = (trigger, floating) =&gt; {
+    const request = ++positionRequest;
+    void computePosition(trigger, floating, {
+      middleware: [
+        offset(tooltipGap),
+        flip({ padding: tooltipGap }),
+        shift({ padding: tooltipGap }),
+        size({
+          padding: tooltipGap,
+          apply({ availableHeight, availableWidth, elements }) {
+            elements.floating.style.setProperty(
+              &quot;--tooltip-available-width&quot;,
+              `${Math.max(0, availableWidth)}px`,
+            );
+            elements.floating.style.setProperty(
+              &quot;--tooltip-available-height&quot;,
+              `${Math.max(0, availableHeight)}px`,
+            );
+          },
+        }),
+      ],
+      placement: getPlacement(trigger),
+      strategy: &quot;fixed&quot;,
+    })
+      .then(({ x, y }) =&gt; {
+        if (activeTrigger !== trigger || request !== positionRequest) {
+          return;
+        }
+        const scale = window.devicePixelRatio || 1;
+        floating.style.transform = `translate(${Math.round(x * scale) / scale}px, ${Math.round(y * scale) / scale}px)`;
+        floating.style.visibility = &quot;visible&quot;;
+      })
+      .catch(() =&gt; {
+        if (activeTrigger === trigger &amp;&amp; request === positionRequest) {
+          closeTooltip(false);
+        }
+      });
+  };
+  const openTooltip = (trigger) =&gt; {
+    const content = getContent(trigger);
+    if (!trigger.isConnected || content.length === 0) {
+      return;
+    }
+    clearOpenTimeout();
+    if (activeTrigger === trigger) {
+      return;
+    }
+    closeTooltip();
+    const floating = getTooltip();
+    floating.textContent = content;
+    floating.style.visibility = &quot;hidden&quot;;
+    floating.style.transform = &quot;translate(0, 0)&quot;;
+    document.body.appendChild(floating);
+    activeTrigger = trigger;
+    setDescribedBy(trigger, true);
+    autoUpdateCleanup = autoUpdate(trigger, floating, () =&gt; {
+      updatePosition(trigger, floating);
+    });
+  };
+  const requestOpen = (trigger, immediate = false) =&gt; {
+    if (
+      getContent(trigger).length === 0 ||
+      activeTrigger === trigger ||
+      pendingTrigger === trigger
+    ) {
+      return;
+    }
+    clearOpenTimeout();
+    pendingTrigger = trigger;
+    const delay =
+      immediate || activeTrigger != null || Date.now() &lt; skipDelayUntil
+        ? 0
+        : hoverDelay;
+    if (delay === 0) {
+      openTooltip(trigger);
+      return;
+    }
+    openTimeout = window.setTimeout(() =&gt; {
+      openTimeout = null;
+      pendingTrigger = null;
+      openTooltip(trigger);
+    }, delay);
+  };
+  const handlePointerOpen = (event) =&gt; {
+    if (event.pointerType === &quot;touch&quot;) {
+      return;
+    }
+    const trigger = getTrigger(event);
+    if (trigger == null || containsTarget(trigger, event.relatedTarget)) {
+      return;
+    }
+    requestOpen(trigger);
+  };
+  const handlePointer = (event) =&gt; {
+    lastPointerWasTouch =
+      event.type === &quot;pointerdown&quot; &amp;&amp; event.pointerType === &quot;touch&quot;;
+  };
+  const handleTouchClick = (event) =&gt; {
+    const isTouch = event.pointerType === &quot;touch&quot; || lastPointerWasTouch;
+    lastPointerWasTouch = false;
+    if (!isTouch || event.detail === 0) {
+      return;
+    }
+    const trigger = getTrigger(event);
+    if (
+      trigger == null ||
+      !trigger.isConnected ||
+      getContent(trigger).length === 0 ||
+      (pinnedByTouch &amp;&amp; activeTrigger === trigger)
+    ) {
+      if (pinnedByTouch) {
+        closeTooltip();
+      }
+      return;
+    }
+    openTooltip(trigger);
+    pinnedByTouch = activeTrigger === trigger;
+    window.setTimeout(() =&gt; {
+      if (activeTrigger === trigger &amp;&amp; !trigger.isConnected) {
+        closeTooltip(false);
+      }
+    }, 0);
+  };
+  const handleLeave = (event) =&gt; {
+    if (pinnedByTouch) {
+      return;
+    }
+    const trigger = getTrigger(event);
+    if (trigger == null || containsTarget(trigger, event.relatedTarget)) {
+      return;
+    }
+    if (activeTrigger === trigger || pendingTrigger === trigger) {
+      closeTooltip();
+    }
+  };
+  const handleFocusIn = (event) =&gt; {
+    const trigger = getTrigger(event);
+    if (trigger?.matches(&quot;:focus-visible&quot;)) {
+      requestOpen(trigger, true);
+    }
+  };
+  const handleKeyDown = (event) =&gt; {
+    if (event.key === &quot;Escape&quot;) {
+      closeTooltip();
+    }
+  };
+  const handleContextMenu = (event) =&gt; {
+    lastPointerWasTouch = false;
+    const trigger = getTrigger(event);
+    if (activeTrigger === trigger || pendingTrigger === trigger) {
+      closeTooltip();
+    }
+  };
+  const handlers = {
+    pointerover: handlePointerOpen,
+    pointerdown: handlePointer,
+    pointercancel: handlePointer,
+    click: handleTouchClick,
+    pointerout: handleLeave,
+    focusin: handleFocusIn,
+    focusout: handleLeave,
+    keydown: handleKeyDown,
+    contextmenu: handleContextMenu,
+  };
+  const roots = new Map();
+  const handledEvents = new WeakSet();
+  const handleEvent = (event) =&gt; {
+    if (handledEvents.has(event)) return;
+    handledEvents.add(event);
+    handlers[event.type](event);
+  };
+  const discoverRoots = (node) =&gt; {
+    if (node.shadowRoot) listen(node.shadowRoot);
+    for (const element of node.querySelectorAll(&quot;*&quot;)) {
+      if (element.shadowRoot) listen(element.shadowRoot);
+    }
+  };
+  const listen = (root) =&gt; {
+    if (roots.has(root)) return;
+    for (const type of Object.keys(handlers)) root.addEventListener(type, handleEvent);
+    const observer = new window.MutationObserver((records) =&gt; {
+      for (const { addedNodes } of records) {
+        for (const node of addedNodes) {
+          if (node.nodeType === Node.ELEMENT_NODE) discoverRoots(node);
+        }
+      }
+      for (const [root, cleanup] of roots) {
+        if (root.host &amp;&amp; !root.host.isConnected) {
+          cleanup();
+          roots.delete(root);
+        }
+      }
+      if (activeTrigger &amp;&amp; !activeTrigger.isConnected) closeTooltip(false);
+    });
+    observer.observe(root, { childList: true, subtree: true });
+    roots.set(root, () =&gt; {
+      observer.disconnect();
+      for (const type of Object.keys(handlers)) root.removeEventListener(type, handleEvent);
+    });
+    discoverRoots(root);
+  };
+  const destroy = () =&gt; {
+    closeTooltip(false);
+    lastPointerWasTouch = false;
+    for (const cleanup of roots.values()) cleanup();
+    roots.clear();
+    tooltip = null;
+  };
+
+  // Events between children of one shadow root never reach the document.
+  listen(document);
+  window.addEventListener(&quot;pagehide&quot;, destroy, { once: true });
+})();
+&lt;/script&gt;
+&lt;script id=&quot;codex-visualization-tabs&quot;&gt;
+(() =&gt; {
+  const selector = &#x27;.nav[role=&quot;tablist&quot;] [role=&quot;tab&quot;]&#x27;;
+  const disabled = &#x27;:disabled,[aria-disabled=&quot;true&quot;]&#x27;;
+  const selectTab = (selected) =&gt; {
+    const panelId = selected.getAttribute(&quot;aria-controls&quot;);
+    for (const tab of selected.closest(&#x27;[role=&quot;tablist&quot;]&#x27;).querySelectorAll(&#x27;[role=&quot;tab&quot;]&#x27;)) {
+      const active = tab === selected;
+      tab.classList.toggle(&quot;active&quot;, active);
+      tab.setAttribute(&quot;aria-selected&quot;, String(active));
+      const id = tab.getAttribute(&quot;aria-controls&quot;);
+      const panel = id &amp;&amp; document.getElementById(id);
+      if (panel != null) {
+        panel.hidden = id !== panelId;
+        if (!panel.hidden &amp;&amp; selected.id) {
+          panel.setAttribute(&quot;aria-labelledby&quot;, selected.id);
+        }
+      }
+    }
+  };
+  const interact = (event) =&gt; {
+    const tab = event.target?.closest?.(selector);
+    if (event.defaultPrevented || tab == null || tab.matches(disabled)) {
+      return;
+    }
+    if (event.type === &quot;click&quot;) {
+      selectTab(tab);
+      return;
+    }
+    const tabs = Array.from(
+      tab.closest(&#x27;[role=&quot;tablist&quot;]&#x27;).querySelectorAll(&#x27;[role=&quot;tab&quot;]&#x27;),
+    ).filter((candidate) =&gt; !candidate.matches(disabled));
+    const current = tabs.indexOf(tab);
+    let next;
+    if (event.key === &quot;ArrowRight&quot; || event.key === &quot;ArrowDown&quot;) {
+      next = (current + 1) % tabs.length;
+    } else if (event.key === &quot;ArrowLeft&quot; || event.key === &quot;ArrowUp&quot;) {
+      next = (current + tabs.length - 1) % tabs.length;
+    } else if (event.key === &quot;Home&quot;) {
+      next = 0;
+    } else if (event.key === &quot;End&quot;) {
+      next = tabs.length - 1;
+    } else {
+      return;
+    }
+    event.preventDefault();
+    tabs[next].focus();
+    selectTab(tabs[next]);
+  };
+
+  for (const list of document.querySelectorAll(&#x27;.nav[role=&quot;tablist&quot;]&#x27;)) {
+    const selected =
+      list.querySelector(&#x27;[role=&quot;tab&quot;][aria-selected=&quot;true&quot;]&#x27;) ??
+      list.querySelector(&#x27;[role=&quot;tab&quot;].active&#x27;) ??
+      list.querySelector(&#x27;[role=&quot;tab&quot;]&#x27;);
+    if (selected != null) {
+      selectTab(selected);
+    }
+  }
+  document.addEventListener(&quot;click&quot;, interact);
+  document.addEventListener(&quot;keydown&quot;, interact);
+  window.addEventListener(&quot;pagehide&quot;, () =&gt; {
+    document.removeEventListener(&quot;click&quot;, interact);
+    document.removeEventListener(&quot;keydown&quot;, interact);
+  }, { once: true });
+})();
+&lt;/script&gt;
+&lt;script id=&quot;codex-visualization-carousel&quot;&gt;
+  (() =&gt; {
+    for (const root of document.querySelectorAll(&quot;.viz-carousel&quot;)) {
+      const panels = Array.from(
+        root.querySelectorAll(&quot;:scope &gt; [data-variant]&quot;),
+      );
+      if (panels.length === 0) {
+        continue;
+      }
+      root.setAttribute(&quot;role&quot;, &quot;group&quot;);
+      panels.forEach((panel, index) =&gt; {
+        panel.hidden = index !== 0;
+        panel.setAttribute(&quot;role&quot;, &quot;group&quot;);
+        if (!panel.hasAttribute(&quot;aria-label&quot;)) {
+          panel.setAttribute(&quot;aria-label&quot;, panel.dataset.variant);
+        }
+      });
+      root.dataset.activeVariant = panels[0].dataset.variant;
+      if (panels.length === 1) {
+        continue;
+      }
+
+      const controls = document.createElement(&quot;div&quot;);
+      controls.className = &quot;viz-carousel-controls&quot;;
+      // Portable copy of the settings dropdown&#x27;s legacy glyph; no 14px icon-package preset matches it.
+      // https://github.com/openai/openai/blob/master/codex/codex-apps/webview/src/icons/chevron.svg
+      controls.innerHTML = `
+      &lt;button type=&quot;button&quot; class=&quot;viz-carousel-previous cursor-interaction&quot;&gt;&lt;i data-lucide=&quot;chevron-left&quot; aria-hidden=&quot;true&quot;&gt;&lt;/i&gt;&lt;/button&gt;
+      &lt;details class=&quot;viz-carousel-picker&quot;&gt;
+        &lt;summary class=&quot;cursor-interaction&quot;&gt;
+          &lt;span class=&quot;viz-carousel-count tabular-nums&quot;&gt;&lt;/span&gt;
+          &lt;span class=&quot;viz-carousel-name&quot;&gt;&lt;/span&gt;
+          &lt;svg class=&quot;viz-carousel-caret&quot; width=&quot;14&quot; height=&quot;14&quot; viewBox=&quot;0 0 20 21&quot; fill=&quot;none&quot; aria-hidden=&quot;true&quot; focusable=&quot;false&quot;&gt;
+            &lt;path d=&quot;M15.2793 7.71101C15.539 7.45131 15.961 7.45131 16.2207 7.71101C16.4804 7.97071 16.4804 8.39272 16.2207 8.65242L10.4707 14.4024C10.211 14.6621 9.78902 14.6621 9.52932 14.4024L3.77932 8.65242L3.69436 8.54792C3.52385 8.28979 3.55205 7.93828 3.77932 7.71101C4.00659 7.48374 4.3581 7.45554 4.61623 7.62605L4.72073 7.71101L10 12.9903L15.2793 7.71101Z&quot; fill=&quot;currentColor&quot; stroke=&quot;currentColor&quot; stroke-width=&quot;0.6&quot; /&gt;
+          &lt;/svg&gt;
+        &lt;/summary&gt;
+        &lt;div class=&quot;viz-carousel-options&quot;&gt;&lt;/div&gt;
+      &lt;/details&gt;
+      &lt;button type=&quot;button&quot; class=&quot;viz-carousel-next cursor-interaction&quot;&gt;&lt;i data-lucide=&quot;chevron-right&quot; aria-hidden=&quot;true&quot;&gt;&lt;/i&gt;&lt;/button&gt;`;
+      const previous = controls.querySelector(&quot;.viz-carousel-previous&quot;);
+      const next = controls.querySelector(&quot;.viz-carousel-next&quot;);
+      const picker = controls.querySelector(&quot;.viz-carousel-picker&quot;);
+      const summary = picker.querySelector(&quot;summary&quot;);
+      const count = controls.querySelector(&quot;.viz-carousel-count&quot;);
+      const name = controls.querySelector(&quot;.viz-carousel-name&quot;);
+      const options = controls.querySelector(&quot;.viz-carousel-options&quot;);
+      const status = document.createElement(&quot;span&quot;);
+      status.className = &quot;sr-only&quot;;
+      status.setAttribute(&quot;role&quot;, &quot;status&quot;);
+      status.setAttribute(&quot;aria-live&quot;, &quot;polite&quot;);
+      status.setAttribute(&quot;aria-atomic&quot;, &quot;true&quot;);
+      previous.setAttribute(
+        &quot;aria-label&quot;,
+        root.dataset.previousLabel ?? &quot;Previous variant&quot;,
+      );
+      next.setAttribute(&quot;aria-label&quot;, root.dataset.nextLabel ?? &quot;Next variant&quot;);
+
+      let active = 0;
+      const choices = panels.map((panel, index) =&gt; {
+        const choice = document.createElement(&quot;button&quot;);
+        choice.type = &quot;button&quot;;
+        choice.className = &quot;cursor-interaction&quot;;
+        choice.textContent = panel.dataset.variant;
+        choice.addEventListener(&quot;click&quot;, () =&gt; {
+          select(index);
+          summary.focus();
+        });
+        options.appendChild(choice);
+        return choice;
+      });
+      const select = (index) =&gt; {
+        const changed = active !== index;
+        active = index;
+        panels.forEach((panel, position) =&gt; {
+          panel.hidden = position !== active;
+          choices[position].setAttribute(
+            &quot;aria-current&quot;,
+            String(position === active),
+          );
+        });
+        root.dataset.activeVariant = panels[active].dataset.variant;
+        count.textContent = `${active + 1} / ${panels.length}`;
+        name.textContent = panels[active].dataset.variant;
+        picker.open = false;
+        if (changed) {
+          status.textContent = `${count.textContent}: ${name.textContent}`;
+        }
+      };
+      previous.addEventListener(&quot;click&quot;, () =&gt;
+        select((active + panels.length - 1) % panels.length),
+      );
+      next.addEventListener(&quot;click&quot;, () =&gt;
+        select((active + 1) % panels.length),
+      );
+      picker.addEventListener(&quot;keydown&quot;, (event) =&gt; {
+        if (event.key === &quot;Escape&quot; &amp;&amp; picker.open) {
+          event.preventDefault();
+          picker.open = false;
+          summary.focus();
+        }
+      });
+      const dismiss = (event) =&gt; {
+        if (!picker.contains(event.target)) {
+          picker.open = false;
+        }
+      };
+      const sizePicker = () =&gt; {
+        root.style.setProperty(
+          &quot;--viz-carousel-picker-height&quot;,
+          `${picker.open ? options.offsetHeight : 0}px`,
+        );
+      };
+      picker.addEventListener(&quot;toggle&quot;, sizePicker);
+      window.addEventListener(&quot;resize&quot;, sizePicker);
+      document.addEventListener(&quot;pointerdown&quot;, dismiss);
+      window.addEventListener(
+        &quot;pagehide&quot;,
+        () =&gt; {
+          document.removeEventListener(&quot;pointerdown&quot;, dismiss);
+          window.removeEventListener(&quot;resize&quot;, sizePicker);
+        },
+        { once: true },
+      );
+      root.append(controls, status);
+      select(0);
+    }
+  })();
+&lt;/script&gt;
+&lt;script id=&quot;codex-visualization-lucide&quot; async src=&quot;https://unpkg.com/lucide@1.17.0/dist/umd/lucide.js&quot;&gt;&lt;/script&gt;
+&lt;script&gt;
+(() =&gt; {
+  const initialize = () =&gt; {
+    globalThis.lucide?.createIcons({ attrs: { width: 16, height: 16 } });
+  };
+  if (globalThis.lucide != null) {
+    initialize();
+    return;
+  }
+  document
+    .getElementById(&quot;codex-visualization-lucide&quot;)
+    ?.addEventListener(&quot;load&quot;, initialize, { once: true });
+})();
+&lt;/script&gt;
+
+&lt;/body&gt;
+&lt;/html&gt;
+"></iframe>
+<script>(() => {
+  const frame = document.getElementById("codex-visualization");
+  if (!(frame instanceof HTMLIFrameElement)) {
+    return;
+  }
+  let viewportHeight = globalThis.innerHeight;
+  const storageKey = `codex:visualization-widget-state-v2:${JSON.stringify([
+    globalThis.location.pathname,
+    globalThis.location.search,
+  ])}`;
+  const parseState = (serializedState) => {
+    if (
+      typeof serializedState !== "string" ||
+      new TextEncoder().encode(serializedState).length > 16 * 1024
+    ) {
+      throw new TypeError(
+        "Widget state must be a JSON object of at most 16 KiB",
+      );
+    }
+    /** @type {unknown} */
+    const state = JSON.parse(serializedState);
+    if (
+      state == null ||
+      typeof state !== "object" ||
+      Array.isArray(state) ||
+      ("imageIds" in state &&
+        (!Array.isArray(state.imageIds) || state.imageIds.length > 0))
+    ) {
+      throw new TypeError("Widget state must be a JSON object");
+    }
+    const storedState = { modelContent: null, privateContent: null, ...state };
+    const canonicalState = JSON.stringify(
+      storedState,
+      (_key, /** @type {unknown} */ value) => {
+        if (typeof value === "number" && !Number.isFinite(value)) {
+          throw new TypeError("Widget state must contain finite numbers");
+        }
+        return value;
+      },
+    );
+    if (new TextEncoder().encode(canonicalState).length > 16 * 1024) {
+      throw new TypeError(
+        "Widget state must be a JSON object of at most 16 KiB",
+      );
+    }
+    return storedState;
+  };
+  let storage = null;
+  let state = null;
+  try {
+    const localStorage = globalThis.localStorage;
+    const probeKey = `${storageKey}:probe`;
+    localStorage.setItem(probeKey, "1");
+    localStorage.removeItem(probeKey);
+    storage = localStorage;
+    const savedState = storage.getItem(storageKey);
+    if (savedState != null) {
+      try {
+        state = parseState(savedState);
+      } catch {
+        // Invalid saved state does not disable future writes.
+      }
+    }
+  } catch {
+    storage = null;
+  }
+  const initialGlobals = {
+    widgetState: state,
+    statePersistence: storage == null ? "none" : "local",
+  };
+
+  const channel = new MessageChannel();
+  channel.port1.addEventListener("message", (event) => {
+    const data = event.data;
+    if (typeof data !== "object" || data == null) {
+      return;
+    }
+    if (data.type === "widget-state-write") {
+      if (!Number.isSafeInteger(data.id) || data.id <= 0) {
+        return;
+      }
+      let ok = false;
+      try {
+        if (storage != null) {
+          const state = parseState(data.state);
+          storage.setItem(storageKey, JSON.stringify(state));
+          ok = true;
+        }
+      } catch {
+        // Storage denial, quota limits, and invalid state return a failed receipt.
+      }
+      channel.port1.postMessage({
+        type: "widget-state-result",
+        id: data.id,
+        ok,
+      });
+      return;
+    }
+    if (data.type === "height") {
+      const height = data.height;
+      if (
+        typeof height === "number" &&
+        Number.isFinite(height) &&
+        height >= 0 &&
+        height <= 10_000
+      ) {
+        frame.style.height = Math.ceil(height) + "px";
+      }
+      return;
+    }
+    if (data.type === "scroll-to") {
+      const top = data.top;
+      if (
+        typeof top === "number" &&
+        Number.isFinite(top) &&
+        top >= 0 &&
+        globalThis.navigator.userActivation?.isActive === true
+      ) {
+        globalThis.scrollTo({
+          top: Math.ceil(
+            globalThis.scrollY + frame.getBoundingClientRect().top + top,
+          ),
+        });
+      }
+      return;
+    }
+    if (data.type === "open-external") {
+      const rawHref = data.href;
+      if (typeof rawHref !== "string") {
+        return;
+      }
+      let href;
+      try {
+        const url = new URL(rawHref, document.baseURI);
+        if (url.protocol !== "https:") {
+          return;
+        }
+        href = url.href;
+      } catch {
+        return;
+      }
+      if (globalThis.navigator.userActivation?.isActive === true) {
+        const anchor = document.createElement("a");
+        anchor.href = href;
+        anchor.rel = "noopener noreferrer";
+        anchor.target = "_blank";
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+      }
+      return;
+    }
+    if (data.type === "follow-up") {
+      const prompt = data.prompt;
+      if (
+        typeof prompt !== "string" ||
+        globalThis.navigator.userActivation?.isActive !== true
+      ) {
+        return;
+      }
+      const title = data.title;
+      globalThis.prompt(typeof title === "string" ? title : prompt, prompt);
+    }
+  });
+  channel.port1.start();
+  const srcdoc = frame.dataset.srcdoc;
+  if (srcdoc == null) {
+    return;
+  }
+  globalThis.addEventListener("resize", () => {
+    const height = Number.parseFloat(frame.style.height);
+    if (!Number.isFinite(height) || height <= viewportHeight) {
+      frame.style.removeProperty("height");
+    }
+    viewportHeight = globalThis.innerHeight;
+    channel.port1.postMessage({ type: "measure" });
+  });
+  frame.addEventListener(
+    "load",
+    () => {
+      frame.contentWindow?.postMessage(
+        { type: "codex-visualization-initialize" },
+        "*",
+        [channel.port2],
+      );
+    },
+    { once: true },
+  );
+  // Match the trusted bootstrap element, not the same text in an authored title.
+  frame.srcdoc = srcdoc.replace(
+    '<script type="application/json" id="codex-visualization-widget-state">__CODEX_VISUALIZATION_WIDGET_STATE__<\/script>',
+    () =>
+      '<script type="application/json" id="codex-visualization-widget-state">' +
+      JSON.stringify(initialGlobals).replaceAll("<", "\\u003c") +
+      "<\/script>",
+  );
+  delete frame.dataset.srcdoc;
+})();
+</script>
+</body>
+</html>

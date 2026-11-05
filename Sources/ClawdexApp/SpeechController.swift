@@ -50,12 +50,15 @@ final class SpeechController {
         let window = PillWindow()
         var size: NSSize = .zero
         var lit = false
+        var neutral = false
+        var retiredSessionIDs: [String] = []
         var label = ""
         var root = ""
         var threadID = ""   // Codex conversation id, for the deep link
         var app = ""        // launching app's bundle id, for click-to-open
         var kitty = KittyTarget()   // kitty window to focus, when launched in kitty
         var paintedLit: Bool?       // last readiness painted onto the kitty tab
+        var paintedNeutral: Bool?
         var paintedKitty: KittyTarget? // actual client tab, not the hook server's
         var paintingKitty = false
         var agent = ""
@@ -66,6 +69,7 @@ final class SpeechController {
         var activeTurnID = ""
         var observedClientID: String?
         var observedProcessID: Int?
+        var observedThreadID = ""
         /// Last hook event or transcript growth — the session's activity clock.
         var lastSeen = Date()
         var transcriptPath = ""
@@ -94,6 +98,7 @@ final class SpeechController {
     }
     private var pillOrder: [String] = []        // oldest → newest, alternating sides
     private var pills: [String: Pill] = [:]
+    private var knownCodexTranscripts: [String: String] = [:]
     private let pillIdleTimeout: TimeInterval = 600   // 10 min quiet → prune
     /// A dim Claude pill with nothing in flight and no activity for this long
     /// shows "?": the turn most likely ended without a hook (Esc before the
@@ -184,6 +189,7 @@ final class SpeechController {
         guard config.showSwitchboard, !kittyDiscoveryInFlight, Self.kittenURL != nil else { return }
         kittyDiscoveryInFlight = true
         let generation = kittyDiscoveryGeneration
+        let knownTranscripts = knownCodexTranscripts
         let known = Set(pills.values.compactMap { Self.kittySocket($0.kitty) })
         Self.kittyQueue.async { [weak self] in
             let directory = URL(fileURLWithPath: NSTemporaryDirectory())
@@ -196,13 +202,30 @@ final class SpeechController {
             }
             let sockets = Array((known.sorted() + discovered.sorted()).reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }.prefix(4))
             let snapshots = sockets.compactMap { socket -> (String, [KittySessionResolver.Client])? in
-                guard let data = Self.execKitten(socket, ["ls"]), let clients = KittySessionResolver.clients(in: data) else { return nil }
+                guard let data = Self.execKitten(socket, ["ls"]), var clients = KittySessionResolver.clients(in: data) else { return nil }
+                for index in clients.indices.prefix(32) where clients[index].agent == "codex" {
+                    let thread = clients[index].resumeThreadID
+                    if !thread.isEmpty {
+                        clients[index].resumeTranscriptPath = knownTranscripts[thread]
+                            ?? KittySessionResolver.transcriptPath(for: thread) ?? ""
+                    }
+                    let observedAt = Date()
+                    if let screen = Self.execKitten(socket, ["get-text", "--match", "id:" + clients[index].window, "--extent", "screen"]),
+                       KittySessionResolver.isEmptyCodexPrompt(screen, root: clients[index].root) {
+                        clients[index].emptyPromptObservedAt = observedAt
+                    }
+                }
                 return (socket, clients)
             }
             DispatchQueue.main.async { [weak self] in
                 guard let self, self.kittyDiscoveryGeneration == generation else { return }
                 self.kittyDiscoveryInFlight = false
-                for (socket, clients) in snapshots { self.reconcileKittySessions(clients, socket: socket) }
+                for (socket, clients) in snapshots {
+                    for client in clients where !client.resumeTranscriptPath.isEmpty {
+                        self.rememberCodexTranscript(client.resumeTranscriptPath, threadID: client.resumeThreadID)
+                    }
+                    self.reconcileKittySessions(clients, socket: socket)
+                }
             }
         }
     }
@@ -238,16 +261,35 @@ final class SpeechController {
             let pid = URL(fileURLWithPath: String(socket.dropFirst(5))).lastPathComponent
                 .replacingOccurrences(of: "kitty-", with: "")
             let target = KittyTarget(window: client.window, pid: pid.allSatisfy(\.isNumber) ? pid : "", sock: socket)
-            if pills[source] == nil {
+            let newlyRegistered = pills[source] == nil
+            if newlyRegistered {
                 updatePill(source: source, label: Self.displayLabel(repo: (client.root as NSString).lastPathComponent, agent: client.agent),
                     agent: client.agent, root: client.root, threadID: "", transcriptPath: "", app: Self.kittyBundleID,
                     kitty: target, lit: true, compacting: false)
             }
             guard let pill = pills[source] else { continue }
+            let bindThread = !client.resumeThreadID.isEmpty && (pill.observedThreadID.isEmpty
+                || (pill.observedClientID != nil && pill.observedClientID != id))
+            if bindThread {
+                pill.observedThreadID = client.resumeThreadID
+                if !client.resumeTranscriptPath.isEmpty,
+                   pill.threadID.isEmpty || Self.isCodexBackgroundFork(path: pill.transcriptPath, foregroundThreadID: client.resumeThreadID) {
+                    let initial = Self.transcriptSnapshot(path: client.resumeTranscriptPath)
+                    pill.transcriptPath = client.resumeTranscriptPath; pill.transcriptOffset = initial.offset
+                    pill.transcript = initial.state; pill.threadID = client.resumeThreadID
+                    pill.sessionID = client.resumeThreadID; pill.activeTurnID = initial.state.codexTurnID
+                    pill.lit = initial.state.codexReady ?? false; pill.neutral = false; pill.paintedLit = nil
+                    pill.size = pill.window.setContent(label: pill.label, lit: pill.lit, accent: color(for: source))
+                }
+            }
             let changed = pill.kitty != target || pill.observedClientID != id || pill.root != client.root
             pill.observedClientID = id; pill.observedProcessID = client.processID
             pill.observedSessionID = pill.sessionID; pill.observedSessionEpoch = pill.sessionEpoch
             pill.kitty = target; pill.app = Self.kittyBundleID; pill.root = client.root
+            if let observedAt = client.emptyPromptObservedAt,
+               newlyRegistered || pill.lastSeen <= observedAt {
+                neutralizeCodexClient(source: source)
+            }
             if changed { pill.paintedLit = nil }
             if changed || pill.paintedLit != pill.lit { paintKittyTab(pill, source: source) }
         }
@@ -302,16 +344,34 @@ final class SpeechController {
         let repo = (source ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let agentTag = (agent ?? "claude")
             .trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if agentTag == "codex", Self.isCodexSubagentTranscript(path: transcriptPath ?? "") { return }
         // Composite identity keyed on repo + agent: the same project running
         // under Claude and Codex at once gets its own pill, bubble, and accent
         // color instead of clobbering one shared entry. `label` is what the user
         // sees — it marks non-Claude agents (e.g. "pylon ·cdx").
         let src = repo.isEmpty ? "" : self.sessionSource(repo: repo, root: root ?? "", agent: agentTag,
             sessionID: sessionID, transcript: transcriptPath ?? "")
+        if agentTag == "codex", !sessionID.isEmpty,
+           pills[src]?.retiredSessionIDs.contains(sessionID) == true { return }
+        // Internal clients can emit hooks without a transcript or agent_id.
+        // They must not replace the identity/readiness of a busy foreground
+        // session just because they share its working directory.
+        if agentTag == "codex", (transcriptPath ?? "").isEmpty,
+           let pill = pills[src], (!pill.lit || pill.neutral), !pill.sessionID.isEmpty,
+           !sessionID.isEmpty, sessionID != pill.sessionID,
+           !(pill.neutral && event == "UserPromptSubmit") { return }
         let label = Self.displayLabel(repo: repo, agent: agentTag)
         // Codex conversation id, recovered from the rollout transcript filename,
         // so a pill click can deep-link straight to that thread.
         let threadID = Self.threadID(fromTranscript: transcriptPath ?? "")
+        if agentTag == "codex" {
+            if let bound = pills[src]?.observedThreadID, !bound.isEmpty,
+               Self.isCodexBackgroundFork(path: transcriptPath ?? "", foregroundThreadID: bound) { return }
+            rememberCodexTranscript(transcriptPath ?? "", threadID: threadID)
+            if event == "SessionStart", sessionSource == "clear", !threadID.isEmpty {
+                pills[src]?.observedThreadID = threadID
+            }
+        }
 
         // Session closed: drop its pill and stop — there's nothing to narrate.
         if event == "SessionEnd" {
@@ -345,7 +405,8 @@ final class SpeechController {
                        app: launchApp, kitty: kitty, lit: lit,
                        compacting: event == "PreCompact",
                        turnEnded: event == "Stop" || event == "StopFailure" || event == "Interrupt", sessionID: sessionID,
-                       sessionStarted: event == "SessionStart", event: event, turnID: turnID)
+                       sessionStarted: event == "SessionStart", event: event, turnID: turnID,
+                       sessionCleared: event == "SessionStart" && sessionSource == "clear")
         }
 
         // A user prompt (or session start) begins a NEW turn: there's no new
@@ -615,16 +676,21 @@ final class SpeechController {
     /// repaints on a readiness change, so busy sessions don't spawn a kitten
     /// per hook event.
     private func paintKittyTab(_ pill: Pill, source: String) {
-        guard !pill.kitty.isEmpty, !pill.paintingKitty, pill.paintedLit != pill.lit else { return }
+        guard !pill.kitty.isEmpty, !pill.paintingKitty,
+              pill.paintedLit != pill.lit || pill.paintedNeutral != pill.neutral else { return }
         pill.paintingKitty = true
         let reported = pill.kitty
         let root = pill.root
         let agent = pill.agent
         let clientPID = pill.observedProcessID
         let lit = pill.lit
+        let neutral = pill.neutral
         let accent = Self.rgb(color(for: source))
         let colors: [String]
-        if pill.lit {
+        if neutral {
+            colors = ["active_bg=#101318", "inactive_bg=#101318",
+                      "active_fg=" + Self.hex(accent), "inactive_fg=" + Self.hex(accent)]
+        } else if pill.lit {
             colors = ["active_bg=" + Self.hex(accent),
                       "active_fg=#ffffff",
                       "inactive_bg=" + Self.hex(Self.mix(accent, (0, 0, 0), 0.5)),
@@ -642,7 +708,7 @@ final class SpeechController {
             var success = false
             if let target, let sock = Self.kittyTarget(target) {
                 let colored = Self.execKitten(sock, ["set-tab-color", "--match", "window_id:" + target.window] + colors) != nil
-                let titled = Self.markKittyTabOnQueue(target, marker: lit ? Self.readyMarker : Self.workingMarker)
+                let titled = Self.markKittyTabOnQueue(target, marker: neutral ? Self.neutralMarker : (lit ? Self.readyMarker : Self.workingMarker))
                 success = colored && titled
             }
             let painted = success
@@ -660,10 +726,10 @@ final class SpeechController {
                     pill.paintedKitty = target
                     if let previous, previous != target { self.clearKittyIfUnclaimed(previous) }
                 }
-                if painted { pill.paintedLit = lit }
+                if painted { pill.paintedLit = lit; pill.paintedNeutral = neutral }
                 // If another event arrived while these commands ran, catch up
                 // once. A failure alone waits for the next event before retry.
-                if pill.lit != lit || pill.kitty != reported || pill.observedProcessID != clientPID {
+                if pill.lit != lit || pill.neutral != neutral || pill.kitty != reported || pill.observedProcessID != clientPID {
                     pill.paintedLit = nil
                     self.paintKittyTab(pill, source: source)
                 }
@@ -673,6 +739,7 @@ final class SpeechController {
 
     private static let readyMarker = "●"
     private static let workingMarker = "○"
+    private static let neutralMarker = "◉"
 
     /// The tab's own title (e.g. the session file's `new_tab app`), captured the
     /// first time we mark it so the marker can be swapped or removed without
@@ -697,7 +764,7 @@ final class SpeechController {
     }
 
     private static func stripMarker(_ title: String) -> String {
-        for m in [readyMarker, workingMarker] where title.hasPrefix(m + " ") {
+        for m in [readyMarker, workingMarker, neutralMarker] where title.hasPrefix(m + " ") {
             return String(title.dropFirst(m.count + 1))
         }
         return title
@@ -871,7 +938,7 @@ final class SpeechController {
                             threadID: String, transcriptPath: String, app: String,
                             kitty: KittyTarget, lit: Bool?, compacting: Bool,
                             turnEnded: Bool = false, sessionID: String = "", sessionStarted: Bool = false,
-                            event: String = "", turnID: String = "") {
+                            event: String = "", turnID: String = "", sessionCleared: Bool = false) {
         let update = { [weak self] in
             guard let self = self, let pet = self.pet else { return }
             let pill: Pill
@@ -892,6 +959,7 @@ final class SpeechController {
             }
             if agent == "codex", ["Stop", "Interrupt"].contains(event), !turnID.isEmpty,
                !pill.activeTurnID.isEmpty, pill.activeTurnID != turnID { return }
+            if pill.neutral, ["Stop", "StopFailure", "Interrupt"].contains(event) { return }
             pill.label = label
             pill.agent = agent
             if !sessionID.isEmpty { pill.sessionID = sessionID }
@@ -925,9 +993,17 @@ final class SpeechController {
                 else if let lit { pill.lit = lit }
                 if pill.lit, ["Stop", "Interrupt"].contains(event) { pill.transcript.codexReady = true }
             } else if let lit { pill.lit = lit }
+            if sessionCleared {
+                pill.neutral = true; pill.lit = true; pill.activeTurnID = ""
+                if agent == "codex", !threadID.isEmpty { pill.observedThreadID = threadID }
+                pill.transcript = TranscriptScan()
+                pill.subagents.removeAll()
+            } else if lit != nil, event != "SessionStart" {
+                pill.neutral = false
+            }
             pill.transcript.codexTransition = nil; pill.transcript.sawAbort = false
             pill.size = pill.window.setContent(label: label, lit: pill.lit,
-                                               accent: self.color(for: source))
+                                               accent: self.color(for: source), neutral: pill.neutral)
             pill.badge.accent = self.color(for: source)
             self.paintKittyTab(pill, source: source)
             self.refreshBadge(pill)
@@ -969,17 +1045,35 @@ final class SpeechController {
     }
 
     /// Remove a session's pill (from any thread).
+    private func neutralizeCodexClient(source: String) {
+        guard let pill = pills[source], pill.agent == "codex", !pill.neutral else { return }
+        if !pill.sessionID.isEmpty {
+            pill.retiredSessionIDs.append(pill.sessionID)
+            pill.retiredSessionIDs = Array(pill.retiredSessionIDs.suffix(16))
+        }
+        updatePill(source: source, label: pill.label, agent: pill.agent, root: pill.root,
+            threadID: "", transcriptPath: "", app: pill.app, kitty: pill.kitty,
+            lit: true, compacting: false, sessionID: pill.sessionID,
+            event: "SessionStart", sessionCleared: true)
+        pill.transcriptPath = ""; pill.transcriptOffset = 0; pill.threadID = ""
+    }
+
     private func removePill(source: String, sessionID: String, transcriptPath: String) {
         DispatchQueue.main.async { [weak self] in
             guard let self, let pill = self.pills[source] else { return }
+            if !sessionID.isEmpty, !pill.sessionID.isEmpty, sessionID != pill.sessionID { return }
+            if !transcriptPath.isEmpty, !pill.transcriptPath.isEmpty, transcriptPath != pill.transcriptPath { return }
             if pill.observedClientID != nil {
-                // The shared server can deliver an old close after a new CLI
-                // occupies the same tab. Verify physical presence first.
+                // Codex /clear ends the old thread before a replacement
+                // SessionStart exists. The CLI still owns the tab: show its
+                // empty prompt as neutral until new activity arrives.
+                if pill.agent == "codex" {
+                    self.neutralizeCodexClient(source: source)
+                }
+                // Presence removes the entry if the CLI actually exited.
                 if self.kittyDiscoveryTimer != nil { self.discoverKittySessions() }
                 return
             }
-            if !sessionID.isEmpty, !pill.sessionID.isEmpty, sessionID != pill.sessionID { return }
-            if !transcriptPath.isEmpty, !pill.transcriptPath.isEmpty, transcriptPath != pill.transcriptPath { return }
             self.removePillOnMain(source: source)
         }
     }
@@ -1102,10 +1196,11 @@ final class SpeechController {
                                                  : (pill.transcript.sawAbort ? true : nil)
             if readiness != nil, !pill.transcript.codexTurnID.isEmpty { pill.activeTurnID = pill.transcript.codexTurnID }
             pill.transcript.sawAbort = false; pill.transcript.codexTransition = nil
-            if let readiness, readiness != pill.lit {
+            if let readiness, !(pill.neutral && readiness), readiness != pill.lit || pill.neutral {
+                pill.neutral = false
                 pill.lit = readiness
                 pill.size = pill.window.setContent(label: pill.label, lit: readiness,
-                                                   accent: self.color(for: source))
+                                                   accent: self.color(for: source), neutral: pill.neutral)
                 paintKittyTab(pill, source: source)
                 pill.window.fadeIn()
                 layoutChanged = true
@@ -1237,7 +1332,7 @@ final class SpeechController {
             let row = sideRows[left, default: 0]; sideRows[left] = row + 1
             let frame = CompanionLayout.sessionFrame(index: row, pet: pet.frame, onLeft: left)
             pill.size = pill.window.setContent(label: pill.label, lit: pill.lit,
-                accent: color(for: source), fixedWidth: frame.width)
+                accent: color(for: source), fixedWidth: frame.width, neutral: pill.neutral)
             pill.window.setFrameOrigin(frame.origin)
             // Subagent badge on the pill's outward side, away from the pet.
             let bx = left ? frame.minX - badgeGap - SubagentBadgeWindow.size
@@ -1272,6 +1367,37 @@ final class SpeechController {
     }
 
     // MARK: - Transcript reading
+
+    private func rememberCodexTranscript(_ path: String, threadID: String) {
+        guard !path.isEmpty, !threadID.isEmpty else { return }
+        if knownCodexTranscripts.count >= 256, knownCodexTranscripts[threadID] == nil { knownCodexTranscripts.removeAll() }
+        knownCodexTranscripts[threadID] = path
+    }
+
+    /// Codex internal agents can inherit the parent's hook session_id without
+    /// supplying agent_id. Their own rollout metadata identifies them reliably.
+    static func isCodexSubagentTranscript(path: String) -> Bool {
+        guard let payload = codexSessionMetadata(path: path), let source = payload["source"] as? [String: Any] else { return false }
+        return source["subagent"] != nil
+    }
+
+    static func isCodexBackgroundFork(path: String, foregroundThreadID: String) -> Bool {
+        guard !foregroundThreadID.isEmpty, let payload = codexSessionMetadata(path: path),
+              let parent = payload["forked_from_id"] as? String, UUID(uuidString: parent) != nil,
+              let thread = payload["id"] as? String, UUID(uuidString: thread) != nil else { return false }
+        return thread.lowercased() != foregroundThreadID.lowercased()
+    }
+
+    private static func codexSessionMetadata(path: String) -> [String: Any]? {
+        guard !path.isEmpty, let file = FileHandle(forReadingAtPath: path) else { return nil }
+        defer { try? file.close() }
+        guard let data = try? file.read(upToCount: 65_536),
+              let end = data.firstIndex(of: 0x0a),
+              let object = try? JSONSerialization.jsonObject(with: Data(data[..<end])) as? [String: Any],
+              object["type"] as? String == "session_meta",
+              let payload = object["payload"] as? [String: Any] else { return nil }
+        return payload
+    }
 
     /// Read the most recent assistant text block from a Claude Code transcript
     /// (JSONL). Reads only the tail of the file to stay cheap on long sessions.

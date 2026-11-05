@@ -3,6 +3,34 @@ import XCTest
 @testable import clawdexd
 
 final class KittySessionResolverTests: XCTestCase {
+    private let emptyCodexScreen = """
+      >_ OpenAI Codex (v0.166.0)
+         /tmp/demo
+
+            ⣀⣤⣤⣤⣀⣀
+            ⠙⠛⠿⠿⠿⠿⠛⠉
+
+    › Ask Codex to do anything
+
+      GPT-6.1-Sol medium · /tmp/demo
+      ← for agents · ? for shortcuts
+    """
+
+    func testRecognizesActualEmptyCodexWelcomeShapeAfterClearWithoutHooks() {
+        XCTAssertTrue(KittySessionResolver.isEmptyCodexPrompt(Data(emptyCodexScreen.utf8), root: "/tmp/demo"))
+        XCTAssertFalse(KittySessionResolver.isEmptyCodexPrompt(Data(emptyCodexScreen.utf8), root: "/tmp/other"))
+        for screen in [
+            "• Tool output quotes:\n" + emptyCodexScreen,
+            emptyCodexScreen.replacingOccurrences(of: "⣀⣤⣤⣤⣀⣀", with: "• Working (10s • esc to interrupt)"),
+            emptyCodexScreen.replacingOccurrences(of: "⣀⣤⣤⣤⣀⣀", with: "• Finished your task"),
+            emptyCodexScreen.replacingOccurrences(of: "› Ask Codex to do anything", with: "› /clear"),
+            emptyCodexScreen + "\n› Previous user prompt",
+            String(repeating: " ", count: 262_145) + emptyCodexScreen
+        ] {
+            XCTAssertFalse(KittySessionResolver.isEmptyCodexPrompt(Data(screen.utf8), root: "/tmp/demo"))
+        }
+    }
+
     private func window(_ id: Int, cwd: String, program: String = "codex") -> [String: Any] {
         ["id": id, "foreground_processes": [["cmdline": [program], "cwd": cwd]]]
     }
@@ -88,5 +116,22 @@ final class KittySessionResolverTests: XCTestCase {
         XCTAssertNil(KittySessionResolver.codexWindow(in: data, root: "/tmp/project"))
         XCTAssertEqual(KittySessionResolver.codexWindow(in: data, root: "/tmp/project", clientPID: 102), "7")
         XCTAssertNil(KittySessionResolver.codexWindow(in: data, root: "/tmp/project", clientPID: 999))
+    }
+
+    func testExplicitResumeThreadIsValidatedAndLocated() throws {
+        let thread = "11111111-1111-4111-8111-111111111111"
+        let data = try listing([["id": 8, "foreground_processes": [
+            ["pid": 101, "cmdline": ["codex", "resume", thread], "cwd": "/tmp/demo"]
+        ]]])
+        XCTAssertEqual(KittySessionResolver.clients(in: data)?.first?.resumeThreadID, thread)
+        let temp = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temp) }
+        let file = temp.appendingPathComponent("rollout-date-\(thread).jsonl")
+        try Data().write(to: file)
+        let found = try XCTUnwrap(KittySessionResolver.transcriptPath(for: thread, sessionsDirectory: temp))
+        XCTAssertEqual(URL(fileURLWithPath: found).lastPathComponent, file.lastPathComponent)
+        XCTAssertTrue(FileManager.default.contentsEqual(atPath: found, andPath: file.path))
+        XCTAssertNil(KittySessionResolver.transcriptPath(for: "--last", sessionsDirectory: temp))
     }
 }

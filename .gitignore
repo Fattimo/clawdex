@@ -5,3 +5,4 @@ Package.resolved
 test-pets/
 *.xcodeproj
 .vscode/
+/output/native-companion-preview/render

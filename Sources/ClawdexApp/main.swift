@@ -206,7 +206,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     private func refreshGitHub() {
         guard !githubSuspended else { return }
-        if !githubSnapshot.receiverReady { reloadGitHub() }
+        if github == nil || (githubConfig?.webhooksEnabled == true && !githubSnapshot.receiverReady) { reloadGitHub() }
         else { github?.refresh(reconnect: githubSnapshot.tunnelURL == nil) }
     }
 

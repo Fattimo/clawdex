@@ -94,6 +94,7 @@ final class GitHubBoardController {
     }
     private func problem(repository: String) -> String? {
         if let error = snapshot.repositories.first(where: { $0.repository == repository })?.error { return error }
+        if config?.webhooksEnabled != true { return nil }
         if !snapshot.receiverReady { return "Local receiver is not running" }
         if let error = snapshot.tunnelError { return error }
         if snapshot.tunnelURL == nil { return "Waiting for ngrok" }

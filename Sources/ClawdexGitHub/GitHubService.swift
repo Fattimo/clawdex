@@ -1,7 +1,7 @@
 import Foundation
 import Darwin
 
-/// Event-driven state owner. Network API work never occupies the control queue,
+/// Polling (default) or event-driven state owner. Network API work never occupies the control queue,
 /// so webhook acknowledgements aren't delayed behind a slow GitHub response.
 public final class GitHubService {
     public let config: GitHubConfig
@@ -15,6 +15,12 @@ public final class GitHubService {
     private var server: GitHubWebhookServer?
     private var tunnel: NgrokTunnel?
     private var active = false
+    private var pollTimer: DispatchSourceTimer?
+    private var disabledHooks = Set<String>()
+    private let pollInterval: TimeInterval
+    private let directory: URL
+    private let refreshRepository: (String, String, GitHubRepositoryState, [StackDefinition]) throws -> GitHubRepositoryState
+    private let disableWebhook: (String, Int) throws -> Void
     private var pending = Set<String>()
     private var fetching = false
     private var scheduled: DispatchWorkItem?
@@ -22,14 +28,24 @@ public final class GitHubService {
     private var deliveryOrder: [String] = []
     private var settling: [String: Int] = [:]
     private let onChange: (GitHubSnapshot) -> Void
-    public init(config: GitHubConfig, onChange: @escaping (GitHubSnapshot) -> Void) {
-        self.config = config; self.onChange = onChange; snapshot = GitHubStore.loadSnapshot()
+    public convenience init(config: GitHubConfig, onChange: @escaping (GitHubSnapshot) -> Void) {
+        let client = GitHubClient()
+        self.init(config: config, pollInterval: 120, directory: GitHubStore.directory,
+            refresh: client.refresh, disableWebhook: client.disableWebhook, onChange: onChange)
+    }
+    init(config: GitHubConfig, pollInterval: TimeInterval, directory: URL,
+         refresh: @escaping (String, String, GitHubRepositoryState, [StackDefinition]) throws -> GitHubRepositoryState,
+         disableWebhook: @escaping (String, Int) throws -> Void,
+         onChange: @escaping (GitHubSnapshot) -> Void) {
+        self.config = config; self.pollInterval = pollInterval; self.directory = directory
+        self.refreshRepository = refresh; self.disableWebhook = disableWebhook
+        self.onChange = onChange; snapshot = GitHubStore.loadSnapshot(at: directory)
     }
     public func start() {
         queue.async { [weak self] in
-            guard let self, self.config.enabled else { return }
+            guard let self, self.config.enabled, !self.active else { return }
             self.active = true; self.snapshot.receiverReady = false; self.snapshot.tunnelURL = nil
-            self.snapshot.tunnelError = "Connecting ngrok"
+            self.snapshot.tunnelError = self.config.webhooksEnabled ? "Connecting ngrok" : nil
             for repo in self.config.repositories {
                 if !self.snapshot.repositories.contains(where: { $0.repository == repo }) { self.snapshot.repositories.append(GitHubRepositoryState(repository: repo)) }
             }
@@ -38,6 +54,19 @@ public final class GitHubService {
                 self.snapshot.repositories[index].webhookURL = nil; self.snapshot.repositories[index].webhookError = nil
             }
             self.publish()
+            if !self.config.webhooksEnabled {
+                let timer = DispatchSource.makeTimerSource(queue: self.queue)
+                timer.schedule(deadline: .now() + self.pollInterval, repeating: self.pollInterval,
+                    leeway: .milliseconds(Int(min(10, self.pollInterval / 10) * 1000)))
+                timer.setEventHandler { [weak self] in
+                    guard let self, self.active else { return }
+                    self.settling.removeAll()
+                    self.enqueue(Set(self.config.repositories), delay: 0)
+                }
+                self.pollTimer = timer; timer.resume()
+                self.enqueue(Set(self.config.repositories), delay: 0)
+                return
+            }
             let server = GitHubWebhookServer(port: self.config.port, handle: { [weak self] request in self?.receive(request) ?? 503 }, state: { [weak self] ready, error in
                 self?.queue.async { [weak self] in
                     guard let self, self.active else { return }
@@ -55,16 +84,17 @@ public final class GitHubService {
     public func stop() {
         queue.sync {
             active = false; scheduled?.cancel(); scheduled = nil; pending.removeAll()
+            pollTimer?.cancel(); pollTimer = nil
             server?.stop(); server = nil; tunnel?.stop(); tunnel = nil
             snapshot.receiverReady = false; snapshot.tunnelURL = nil; snapshot.tunnelError = "GitHub tracking stopped"
-            try? GitHubStore.saveSnapshot(snapshot)
+            try? GitHubStore.saveSnapshot(snapshot, at: directory)
         }
     }
     public func refresh(reconnect: Bool = false) {
         queue.async { [weak self] in
             guard let self, self.active else { return }
             self.settling.removeAll()
-            if reconnect, self.snapshot.receiverReady { self.startTunnel() }
+            if reconnect, self.config.webhooksEnabled, self.snapshot.receiverReady { self.startTunnel() }
             self.enqueue(Set(self.config.repositories), delay: 0)
         }
     }
@@ -125,7 +155,7 @@ public final class GitHubService {
             // those quietly: only refreshed canonical data repaints the board.
             // Ping is rare and useful for diagnostics, so persist its timestamp
             // without producing UI work or a GitHub API request.
-            if event == "ping" { try? GitHubStore.saveSnapshot(snapshot) }
+            if event == "ping" { try? GitHubStore.saveSnapshot(snapshot, at: directory) }
             return 202
         }
     }
@@ -142,12 +172,30 @@ public final class GitHubService {
         guard active, !fetching, let repository = pending.sorted().first else { return }
         pending.remove(repository); fetching = true
         let old = snapshot.repositories.first { $0.repository == repository } ?? GitHubRepositoryState(repository: repository)
+        let hookID = !config.webhooksEnabled && !disabledHooks.contains(repository) ? config.hookIDs[repository] : nil
         worker.async { [weak self] in
-            guard let self else { return }
-            let result = Result { try self.client.refresh(repository: repository, login: self.config.login, previous: old, manual: self.config.manualStacks) }
+            guard let self, self.queue.sync(execute: { self.active }) else { return }
+            // Stop delivery at GitHub, before it can consume tunnel quota.
+            // Only the hook ID recorded by this installation may be changed.
+            let hookResult = hookID.map { id in
+                Self.webhookQueue.sync {
+                    Result { try self.disableWebhook(repository, id) }
+                }
+            }
+            guard self.queue.sync(execute: { self.active }) else { return }
+            let result = Result { try self.refreshRepository(repository, self.config.login, old, self.config.manualStacks) }
             self.queue.async { [weak self] in
                 guard let self, self.active else { return }; self.fetching = false
                 if let index = self.snapshot.repositories.firstIndex(where: { $0.repository == repository }) {
+                    if let hookResult {
+                        switch hookResult {
+                        case .success:
+                            self.disabledHooks.insert(repository)
+                            self.snapshot.repositories[index].webhookError = nil
+                        case .failure:
+                            self.snapshot.repositories[index].webhookError = "Could not deactivate the old webhook. Check gh webhook administration access, then Refresh."
+                        }
+                    }
                     switch result {
                     case .success(var repo):
                         repo.webhookURL = self.snapshot.repositories[index].webhookURL
@@ -166,7 +214,7 @@ public final class GitHubService {
         }
     }
     private func publish() {
-        do { try GitHubStore.saveSnapshot(snapshot) } catch { NSLog("clawdex: could not save GitHub cache") }
+        do { try GitHubStore.saveSnapshot(snapshot, at: directory) } catch { NSLog("clawdex: could not save GitHub cache") }
         let value = snapshot; DispatchQueue.main.async { [weak self] in self?.onChange(value) }
     }
 }

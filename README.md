@@ -168,42 +168,41 @@ section. Hover for the full status; hide and refresh remain available through
 the CLI. The companion stays within the
 screen edges when dragged or resized. Scorebug visibility is independent in Settings.
 
-Install `gh` and `ngrok`, sign in with `gh auth login`, and configure ngrok's
-authentication token locally using its dashboard instructions. The daemon
-starts and supervises ngrok when GitHub tracking is enabled; it already starts
-at login through launchd. No separate hosted backend or regular GitHub polling
-is used. Initial startup, wake, manual refresh and relevant signed webhooks
-refresh data. Ngrok reconnects use bounded backoff, and wake/reconnect triggers
-a catch-up refresh. Before system sleep, Clawdex stops ngrok and the local
-webhook receiver and cancels reconnect attempts. On wake, it restarts the
-connection and refreshes PR state to catch up on missed deliveries.
+Install `gh` and sign in with `gh auth login`. GitHub tracking polls directly
+through `gh` every two minutes; no ngrok, public endpoint or hosted backend is
+needed. Startup, wake and manual Refresh also fetch current state. Refreshes
+are serialized, and polling stops while this Mac sleeps or tracking is disabled.
+Updates may take up to two minutes plus the API fetch time to appear.
 
 ```bash
 clawdex github setup owner/repo
 clawdex github status
-# To select a different assigned/custom endpoint later:
-# clawdex github setup owner/repo --url https://your-ngrok-domain
-# clawdex github setup owner/repo --auto-url
-# Once ngrok is connected, register this receiver on that repository:
+```
+
+Existing configurations also switch to polling. Clawdex deactivates only the
+repository webhook IDs recorded by this installation, retaining their definitions
+for optional reuse. A failed deactivation is shown by `github status` and retried
+on subsequent refreshes. GitHub credentials remain in `gh`. Polling uses your
+account's shared GitHub API quota; it creates no ngrok requests.
+
+For optional instant webhook updates, install and authenticate `ngrok`, then run:
+
+```bash
+clawdex github setup owner/repo --webhooks
+# Optionally add --url https://your-ngrok-domain or --auto-url.
+# Once ngrok connects:
 clawdex github hook owner/repo
 ```
 
-The `hook` command needs repository webhook administration permission. It
-creates or updates only the hook for this receiver's URL. The generated signing
-secret lives in `~/.clawdex/github/config.json` with owner-only permissions;
-GitHub credentials stay in `gh` and ngrok credentials in ngrok's own config.
-Ngrok accounts must have a verified email. The status command reports this
-setup requirement if the provider refuses the connection. A URL is considered
-connected only after ngrok reports that the tunnel started. If your account
-assigns a new URL on reconnect, clawdex updates only its previously registered
-repository hook to the new endpoint. It keeps pills offline until that update
-succeeds. No paid static domain is required. Explicit `--url` remains available
-for accounts with an assigned/reserved domain they can reuse.
-The HTTP receiver binds only to `127.0.0.1:47839`, validates HMAC-SHA256 on the
-raw body, rejects oversized/ambiguous requests, and deduplicates deliveries.
-HTTP introspection is disabled in the managed ngrok process. GitHub remains
-the source of truth: incoming payloads invalidate data rather than directly
-declaring PRs ready.
+Webhook mode requires repository webhook administration permission and uses
+ngrok's standard local auth configuration. The daemon supervises the tunnel,
+updates only its owned hook on reconnect, and stops the receiver before sleep.
+The local receiver binds to `127.0.0.1:47839`, validates HMAC-SHA256 signatures,
+rejects oversized/ambiguous requests and deduplicates deliveries. Signing secrets
+stay in `~/.clawdex/github/config.json` with owner-only permissions. Incoming
+payloads invalidate data; GitHub API results determine readiness. Repository-wide
+webhook traffic can exhaust ngrok's free request allowance on busy repositories.
+Run setup again without `--webhooks` to return to polling.
 
 ```bash
 clawdex github refresh
@@ -216,8 +215,8 @@ clawdex github disable
 Manual stack PR URLs must be from the same repository, in base-to-tip order.
 “Ready” requires every remaining PR to have completed checks, no required
 review outstanding and a clean GitHub merge state. Passing checks alone does
-not make a blocked PR ready. Disconnected receivers, missing webhook setup,
-incomplete data and failed API refreshes display offline/unknown status rather
+not make a blocked PR ready. In webhook mode, disconnected receivers and missing setup display offline status.
+Incomplete data and failed API refreshes display offline/unknown status rather
 than a green pill. After the entire chain merges, its pill disappears and its
 history remains cached. This version opens PRs in GitHub; it does not merge them.
 

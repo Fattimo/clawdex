@@ -22,6 +22,58 @@ final class GitHubTests: XCTestCase {
     func config() throws -> GitHubConfig {
         var result = try GitHubConfig(); result.repositories = ["owner/repo"]; result.login = "me"; result.enabled = true; return result
     }
+    func testLegacyConfigurationDefaultsToPollingAndPreservesOwnedHook() throws {
+        var original = try config(); original.hookIDs = ["owner/repo": 123]
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(original)) as? [String: Any])
+        json.removeValue(forKey: "useWebhooks")
+        let decoded = try JSONDecoder().decode(GitHubConfig.self, from: JSONSerialization.data(withJSONObject: json))
+        XCTAssertFalse(decoded.webhooksEnabled)
+        XCTAssertEqual(decoded.hookIDs["owner/repo"], 123)
+        original.useWebhooks = true
+        XCTAssertTrue(try JSONDecoder().decode(GitHubConfig.self, from: JSONEncoder().encode(original)).webhooksEnabled)
+    }
+
+    func testPollingRetriesOwnedHookCleanupSerializesRefreshAndStops() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        var settings = try config(); settings.hookIDs = ["owner/repo": 123]
+        let lock = NSLock()
+        var refreshes = 0, disableAttempts = 0, simultaneous = 0, maximum = 0
+        let refreshed = expectation(description: "Repeated polls complete")
+        let service = GitHubService(config: settings, pollInterval: 0.03, directory: directory,
+            refresh: { repository, login, previous, _ in
+                XCTAssertEqual(repository, "owner/repo"); XCTAssertEqual(login, "me")
+                lock.lock(); simultaneous += 1; maximum = max(maximum, simultaneous); lock.unlock()
+                Thread.sleep(forTimeInterval: 0.05) // Longer than a tick: calls must not overlap.
+                lock.lock(); refreshes += 1; simultaneous -= 1; lock.unlock()
+                var result = previous; result.updatedAt = Date(); return result
+            }, disableWebhook: { repository, id in
+                XCTAssertEqual(repository, "owner/repo"); XCTAssertEqual(id, 123)
+                lock.lock(); disableAttempts += 1; let attempt = disableAttempts; lock.unlock()
+                if attempt == 1 { throw GitHubError.message("Temporary failure") }
+            }, onChange: { snapshot in
+                XCTAssertFalse(snapshot.receiverReady)
+                XCTAssertNil(snapshot.tunnelURL); XCTAssertNil(snapshot.tunnelError)
+                lock.lock(); let count = refreshes; lock.unlock()
+                if count == 4 { refreshed.fulfill() }
+            })
+        service.start()
+        wait(for: [refreshed], timeout: 5)
+        service.stop()
+        // An in-flight fetch may finish, but must never schedule more work.
+        Thread.sleep(forTimeInterval: 0.1)
+        lock.lock(); let stoppedCount = refreshes; lock.unlock()
+        Thread.sleep(forTimeInterval: 0.12)
+        lock.lock()
+        XCTAssertEqual(refreshes, stoppedCount)
+        XCTAssertEqual(disableAttempts, 2) // Retry failure, then leave the inactive hook alone.
+        XCTAssertEqual(maximum, 1)
+        lock.unlock()
+        let state = GitHubStore.loadSnapshot(at: directory)
+        XCTAssertNil(state.repositories.first?.webhookError)
+        XCTAssertNotNil(state.repositories.first?.updatedAt)
+    }
+
     func testReadinessRequiresCleanMergeAndCompleteChecks() throws {
         XCTAssertEqual(try pr().health, .ready)
         XCTAssertEqual(try pr(merge: "UNKNOWN").health, .unknown)

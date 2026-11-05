@@ -108,6 +108,11 @@ public struct GitHubClient {
             return try ToolProcess.run("gh", ["api", "graphql", "--input", "-"], input: input)
         }
     }
+    public func disableWebhook(repository: String, id: Int) throws {
+        guard PRReference.validRepository(repository), id > 0 else { throw GitHubError.message("Invalid owned webhook") }
+        _ = try ToolProcess.run("gh", ["api", "--method", "PATCH", "repos/\(repository)/hooks/\(id)", "--input", "-"],
+            input: JSONSerialization.data(withJSONObject: ["active": false]))
+    }
     public func installWebhook(repository: String, endpoint: String, secret: String, knownID: Int? = nil, createIfMissing: Bool = true) throws -> Int {
         guard PRReference.validRepository(repository), let base = PRReference.publicEndpoint(endpoint) else { throw GitHubError.message("Invalid webhook endpoint or repository") }
         let url = base.appendingPathComponent("github/webhook").absoluteString

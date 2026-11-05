@@ -7,6 +7,7 @@ enum GitHubCommands {
         switch verb {
         case "setup":
             var values = Array(args.dropFirst()); var endpoint: String?
+            let webhooks = values.contains("--webhooks"); values.removeAll { $0 == "--webhooks" }
             let autoURL = values.contains("--auto-url"); values.removeAll { $0 == "--auto-url" }
             if let index = values.firstIndex(of: "--url") {
                 guard values.indices.contains(index + 1), let url = PRReference.publicEndpoint(values[index + 1]) else { throw GitHubError.message("--url requires a public HTTPS endpoint") }
@@ -20,22 +21,30 @@ enum GitHubCommands {
             config.manualStacks = config.manualStacks.filter { config.repositories.contains($0.repository) }
             if let endpoint { config.publicURL = endpoint }
             else if autoURL { config.publicURL = nil }
+            config.useWebhooks = webhooks
             config.enabled = true; try GitHubStore.saveConfig(config); send(["control": "github-reload"])
             print("GitHub tracking enabled for \(config.repositories.joined(separator: ", ")).")
-            print("The daemon starts ngrok using its standard local auth configuration.")
-            print("Once connected: clawdex github hook \(config.repositories[0])")
+            if config.webhooksEnabled {
+                print("The daemon starts ngrok using its standard local auth configuration.")
+                print("Once connected: clawdex github hook \(config.repositories[0])")
+            } else {
+                print("Polling every 120 seconds through gh. No ngrok required; previously owned webhooks are deactivated.")
+            }
         case "status":
             guard let config = try? GitHubStore.loadConfig() else { print("GitHub is not configured. Run: clawdex github setup owner/repo"); return }
             let state = GitHubStore.loadSnapshot()
             print("GitHub: \(config.enabled ? "enabled" : "disabled") · \(config.login)")
-            print("Receiver: \(state.receiverReady ? "listening" : "offline") on 127.0.0.1:\(config.port)")
-            print("Webhook URL: \(state.tunnelURL.map { $0 + "/github/webhook" } ?? "not connected")")
-            if let error = state.tunnelError { print(error) }
+            if config.webhooksEnabled {
+                print("Receiver: \(state.receiverReady ? "listening" : "offline") on 127.0.0.1:\(config.port)")
+                print("Webhook URL: \(state.tunnelURL.map { $0 + "/github/webhook" } ?? "not connected")")
+                if let error = state.tunnelError { print(error) }
+            } else { print("Transport: polling every 120 seconds through gh (ngrok off)") }
             for repo in config.repositories {
-                print("\(repo): \(config.hookIDs[repo].map { "webhook #\($0) configured" } ?? "webhook not connected")")
+                print("\(repo): \(config.webhooksEnabled ? (config.hookIDs[repo].map { "webhook #\($0) configured" } ?? "webhook not connected") : "polling")")
+                if let date = state.repositories.first(where: { $0.repository == repo })?.updatedAt { print("  Last refreshed: \(date)") }
                 if let error = state.repositories.first(where: { $0.repository == repo })?.error { print("  Refresh error: \(error)") }
                 if let error = state.repositories.first(where: { $0.repository == repo })?.webhookError { print("  Webhook error: \(error)") }
-                if config.hookIDs[repo] != nil { print("  Webhook target: \(state.repositories.first(where: { $0.repository == repo })?.webhookURL ?? "reconnecting")") }
+                if config.webhooksEnabled, config.hookIDs[repo] != nil { print("  Webhook target: \(state.repositories.first(where: { $0.repository == repo })?.webhookURL ?? "reconnecting")") }
             }
             for stack in state.stacks(in: config) {
                 print("\(stack.definition.id)\t\(stack.definition.name)\t\(stack.label)\t\(stack.definition.numbers.map { "#\($0)" }.joined(separator: " → "))")
@@ -44,10 +53,11 @@ enum GitHubCommands {
         case "refresh": send(["control": "github-refresh"]); print("Refresh requested.")
         case "disable":
             var config = try GitHubStore.loadConfig(); config.enabled = false; try GitHubStore.saveConfig(config)
-            send(["control": "github-reload"]); print("GitHub receiver and ngrok stopped. Repository webhook definitions are retained.")
+            send(["control": "github-reload"]); print("GitHub tracking stopped. Repository webhook definitions are retained.")
         case "hook":
             guard args.count == 2 else { throw GitHubError.message("Usage: clawdex github hook owner/repo") }
             var config = try GitHubStore.loadConfig(); let repository = args[1].lowercased()
+            guard config.webhooksEnabled else { throw GitHubError.message("Polling is enabled. Use github setup with --webhooks before registering a hook.") }
             guard config.enabled, config.repositories.contains(repository) else { throw GitHubError.message("Set up this repository first") }
             let snapshot = GitHubStore.loadSnapshot()
             guard snapshot.receiverReady, let endpoint = snapshot.tunnelURL, snapshot.tunnelError == nil else { throw GitHubError.message("Wait for ngrok to connect; check clawdex github status") }
@@ -74,7 +84,7 @@ enum GitHubCommands {
     }
     private static func printHelp() {
         print("""
-        clawdex github setup owner/repo [--url https://your-ngrok-domain | --auto-url]
+        clawdex github setup owner/repo [--webhooks] [--url https://your-ngrok-domain | --auto-url]
         clawdex github status
         clawdex github hook owner/repo       create/update this endpoint's webhook
         clawdex github refresh               refresh once and reconnect if needed
@@ -82,8 +92,9 @@ enum GitHubCommands {
         clawdex github hide|show <stack-id>
         clawdex github disable
 
-        Setup reuses gh auth and ngrok's standard local auth config. No recurring
-        GitHub polling: updates follow signed webhooks, login, wake and refresh.
+        Setup reuses gh auth and polls every 120 seconds. No ngrok is needed.
+        --webhooks opts into signed webhook delivery through ngrok instead.
+        Startup, wake and manual refresh also fetch current PR state.
         """)
     }
 }

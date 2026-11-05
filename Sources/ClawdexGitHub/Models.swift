@@ -294,6 +294,9 @@ public struct GitHubConfig: Codable {
     public var manualStacks: [StackDefinition] = []
     public var hiddenStacks: [String] = []
     public var hookIDs: [String: Int] = [:]
+    /// Missing in older configs: migrate to polling without starting a tunnel.
+    public var useWebhooks: Bool?
+    public var webhooksEnabled: Bool { useWebhooks == true }
     public init() throws {
         var bytes = [UInt8](repeating: 0, count: 32)
         guard SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) == errSecSuccess else { throw GitHubError.message("Could not generate a webhook secret") }

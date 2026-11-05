@@ -1018,7 +1018,10 @@ final class SpeechController {
                 if agent == "codex", !threadID.isEmpty { pill.observedThreadID = threadID }
                 pill.transcript = TranscriptScan()
                 pill.subagents.removeAll()
-            } else if lit != nil, event != "SessionStart" {
+            } else if lit != nil, event != "SessionStart",
+                      // Claude's idle "waiting for you" Notification fires 60s
+                      // after /clear; the session is still fresh, so stay neutral.
+                      !(pill.neutral && event == "Notification") {
                 pill.neutral = false
             }
             pill.transcript.codexTransition = nil; pill.transcript.sawAbort = false

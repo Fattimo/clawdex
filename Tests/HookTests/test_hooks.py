@@ -87,11 +87,14 @@ class CodexHooksTests(unittest.TestCase):
         self.manage("remove")
         self.assertEqual(json.loads(self.config.read_text()), {"hooks": {"PreToolUse": [group]}})
 
-    def event(self, name, agent="codex", **fields):
+    def event(self, name, agent="codex", project_dir=None, **fields):
         (self.home / ".clawdex").mkdir(exist_ok=True)
         env = dict(os.environ, HOME=str(self.home), CLAWDEX_SOCK=str(self.home / "no-socket"))
         env.pop("CLAWDEX_NO_TRAIL", None)
         env.pop("CLAWDEX_AGENT", None)
+        env.pop("CLAUDE_PROJECT_DIR", None)
+        if project_dir is not None:
+            env["CLAUDE_PROJECT_DIR"] = project_dir
         result = subprocess.run(
             ["sh", str(ROOT / "hooks/clawdex-hook"), agent],
             input=json.dumps({"hook_event_name": name, "cwd": str(self.home), **fields}),
@@ -115,6 +118,20 @@ class CodexHooksTests(unittest.TestCase):
         self.assertEqual(data["tool"], "Bash")
         self.assertEqual(data["transcript"], transcript)
         self.assertEqual(data["root"], str(self.home))
+
+    def test_claude_session_keeps_launch_project_after_cd(self):
+        launch = self.home / "appcopy"
+        other = self.home / "demo-redate-issues"
+        for repo in (launch, other):
+            (repo / ".git").mkdir(parents=True)
+        (other / "src").mkdir()
+        data = self.event("PreToolUse", agent="claude", project_dir=str(launch),
+                          cwd=str(other / "src"), tool_name="Bash", tool_input={"command": "ls"})
+        self.assertEqual((data["source"], data["root"]), ("appcopy", str(launch)))
+        # Codex can inherit CLAUDE_PROJECT_DIR from a parent Claude; it keeps its cwd.
+        data = self.event("PreToolUse", agent="codex", project_dir=str(launch),
+                          cwd=str(other / "src"), tool_name="Bash", tool_input={"command": "ls"})
+        self.assertEqual(data["source"], "demo-redate-issues")
 
     def test_interrupt_and_session_end_release_work(self):
         for name in ("Interrupt", "SessionEnd"):

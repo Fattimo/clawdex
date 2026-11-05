@@ -78,7 +78,14 @@ SUBAGENT="$(json_get agent_id)"
 # Project the event came from. CWD is the agent's live working dir; ROOT is the
 # repo root we actually want to label by and open on click; SOURCE is its name.
 CWD="$(json_get cwd)"
-ROOT="$(find_root "$CWD")"
+# Claude Code exports the directory it was launched in. Label by that, not the
+# live cwd: an agent that cd's into another repo must not rename its session.
+# Codex sessions (which may inherit this from a parent Claude) keep the cwd.
+LABEL_DIR="$CWD"
+if [ "$AGENT" = "claude" ] && [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then
+  LABEL_DIR="$CLAUDE_PROJECT_DIR"
+fi
+ROOT="$(find_root "$LABEL_DIR")"
 SOURCE="$(basename_of "$ROOT")"
 # The GUI app that launched this session. macOS LaunchServices stamps the
 # launching app's bundle id into __CFBundleIdentifier, and it propagates down

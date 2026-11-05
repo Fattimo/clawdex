@@ -108,6 +108,36 @@ final class KittySessionResolverTests: XCTestCase {
         XCTAssertNil(KittySessionResolver.clients(in: Data("bad JSON".utf8)))
     }
 
+    func testClaudeClientsUseLaunchDirectoryNotLiveCwd() throws {
+        let data = try listing([["id": 2, "foreground_processes": [
+            ["pid": 201, "cmdline": ["claude", "--continue"], "cwd": "/tmp/demo-redate-issues"],
+            ["pid": 202, "cmdline": ["codex"], "cwd": "/tmp/codex-live"]
+        ]]])
+        let launch: (Int) -> String? = { [201: "/tmp/appcopy", 202: "/tmp/codex-launch"][$0] }
+        let clients = try XCTUnwrap(KittySessionResolver.clients(in: data, launchDirectory: launch))
+        XCTAssertEqual(clients.first { $0.agent == "claude" }?.root, "/tmp/appcopy")
+        XCTAssertEqual(clients.first { $0.agent == "codex" }?.root, "/tmp/codex-live")
+        let fallback = try XCTUnwrap(KittySessionResolver.clients(in: data, launchDirectory: { _ in nil }))
+        XCTAssertEqual(fallback.first { $0.agent == "claude" }?.root, "/tmp/demo-redate-issues")
+    }
+
+    func testLaunchDirectoryParsesProcargs() {
+        func procargs(_ argv: [String], env: [String]) -> [UInt8] {
+            var bytes = withUnsafeBytes(of: Int32(argv.count)) { Array($0) }
+            bytes += Array("/usr/bin/claude".utf8) + [0, 0, 0]
+            for item in argv + env { bytes += Array(item.utf8) + [0] }
+            return bytes + [0]
+        }
+        let dir = FileManager.default.temporaryDirectory.path
+        XCTAssertEqual(KittySessionResolver.launchDirectory(procargs: procargs(["claude", "PWD=/argv"], env: ["HOME=/x", "PWD=" + dir])), dir)
+        XCTAssertNil(KittySessionResolver.launchDirectory(procargs: procargs(["claude"], env: ["PWD=/does/not/exist"])))
+        XCTAssertNil(KittySessionResolver.launchDirectory(procargs: procargs(["claude"], env: ["PWD=relative"])))
+        XCTAssertNil(KittySessionResolver.launchDirectory(procargs: [1, 0]))
+        XCTAssertNil(KittySessionResolver.launchDirectory(procargs: withUnsafeBytes(of: Int32(50)) { Array($0) } + [0x41]))
+        XCTAssertEqual(KittySessionResolver.launchDirectory(pid: Int(getpid())),
+                       ProcessInfo.processInfo.environment["PWD"].flatMap { FileManager.default.fileExists(atPath: $0) ? $0 : nil })
+    }
+
     func testObservedProcessIdentityDisambiguatesSharedRepoClients() throws {
         let data = try listing([
             ["id": 6, "foreground_processes": [["pid": 101, "cmdline": ["codex"], "cwd": "/tmp/project"]]],

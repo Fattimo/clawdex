@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 
 /// Codex's shared server can inherit KITTY_WINDOW_ID from a different CLI.
 /// Locate the actual foreground client instead of trusting that inherited ID.
@@ -35,7 +36,7 @@ enum KittySessionResolver {
     }
 
     /// Local client presence exists before Codex sends its first hook.
-    static func clients(in data: Data) -> [Client]? {
+    static func clients(in data: Data, launchDirectory: (Int) -> String? = launchDirectory(pid:)) -> [Client]? {
         guard let windows = windows(in: data) else { return nil }
         var result: [Client] = []
         for window in windows {
@@ -47,7 +48,10 @@ enum KittySessionResolver {
                 let agent = (executable as NSString).lastPathComponent
                 guard ["claude", "codex"].contains(agent),
                       !command.dropFirst().contains(where: { ["app-server", "exec", "mcp-server", "--print", "-p"].contains($0) }) else { continue }
-                var client = Client(window: String(id), processID: pid, agent: agent, root: projectRoot(cwd))
+                // Claude chdirs into whatever repo it is working in; name the
+                // session after where it was launched, matching its hooks.
+                let home = agent == "claude" ? (launchDirectory(pid) ?? cwd) : cwd
+                var client = Client(window: String(id), processID: pid, agent: agent, root: projectRoot(home))
                 if agent == "codex", let resume = command.firstIndex(of: "resume"), resume + 1 < command.count,
                    UUID(uuidString: command[resume + 1]) != nil {
                     client.resumeThreadID = command[resume + 1].lowercased()
@@ -57,6 +61,46 @@ enum KittySessionResolver {
         }
         return Array(Set(result.map(\.identity))).compactMap { id in result.first { $0.identity == id } }
             .sorted { $0.identity < $1.identity }
+    }
+
+    /// The directory a process was started in: `PWD` from its exec-time
+    /// environment (KERN_PROCARGS2, same-user processes only). Nil unless it
+    /// names an existing absolute directory.
+    static func launchDirectory(pid: Int) -> String? {
+        guard pid > 0, pid <= Int(Int32.max) else { return nil }
+        var mib: [Int32] = [CTL_KERN, KERN_PROCARGS2, Int32(pid)]
+        var size = 0
+        guard sysctl(&mib, 3, nil, &size, nil, 0) == 0, size > MemoryLayout<Int32>.size, size <= 1 << 20 else { return nil }
+        var buffer = [UInt8](repeating: 0, count: size)
+        guard sysctl(&mib, 3, &buffer, &size, nil, 0) == 0, size > MemoryLayout<Int32>.size, size <= buffer.count else { return nil }
+        return launchDirectory(procargs: Array(buffer[..<size]))
+    }
+
+    /// Parses a KERN_PROCARGS2 buffer: argc, exec path, padding NULs, argv,
+    /// then environment strings. Bounds-checked throughout.
+    static func launchDirectory(procargs: [UInt8]) -> String? {
+        let header = MemoryLayout<Int32>.size
+        guard procargs.count > header else { return nil }
+        let argc = procargs[0..<header].withUnsafeBytes { $0.loadUnaligned(as: Int32.self) }
+        guard argc >= 0, argc < 4096 else { return nil }
+        var index = header
+        func skipString() { while index < procargs.count, procargs[index] != 0 { index += 1 } }
+        func skipNULs() { while index < procargs.count, procargs[index] == 0 { index += 1 } }
+        skipString(); skipNULs()                         // exec path + padding
+        for _ in 0..<argc { skipString(); index += 1 }   // argv
+        let prefix = Array("PWD=".utf8)
+        while index < procargs.count, procargs[index] != 0 {
+            let start = index
+            skipString()
+            let entry = procargs[start..<index]
+            index += 1
+            guard entry.starts(with: prefix),
+                  let path = String(bytes: entry.dropFirst(prefix.count), encoding: .utf8),
+                  path.hasPrefix("/"), path != "/" else { continue }
+            var isDirectory: ObjCBool = false
+            return FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory) && isDirectory.boolValue ? path : nil
+        }
+        return nil
     }
 
     static func transcriptPath(for threadID: String, sessionsDirectory: URL? = nil) -> String? {

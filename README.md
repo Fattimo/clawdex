@@ -54,9 +54,9 @@ Clearing a session (`SessionStart` with source `clear`) keeps a neutral
 switchboard entry and kitty tab with an accent dot. Prompt/tool activity returns
 it to working; completion lights it again. Late completion hooks cannot light a
 freshly cleared session.
-Codex can instead end its old thread before the replacement emits a startup
-hook. While that CLI is still present in kitty, its entry becomes neutral;
-exiting the CLI still removes it through presence detection.
+Ending a thread alone does not imply clear; exiting the CLI removes its entry
+through presence detection. An explicit resume can reactivate the same thread
+after a clear and reloads its saved ready/busy state.
 Some Codex clears emit no hook until the next prompt. Kitty presence checks
 also recognize the exact empty Codex welcome screen, including its project
 directory, and neutralize both indicators within the next poll. Newer hook
@@ -145,23 +145,25 @@ discovers your open PRs by repository and groups branches whose base points to
 another PR's head. Cached chain membership survives parent merges and GitHub
 retargeting. Single PRs get their own entry; explicit chains can also be named.
 The scorebug uses one opaque neutral card, 38 points tall, with a vertically
-centered status dot on the left: green when the entire stack is ready, yellow
-while CI is pending, red if an open stack member has failed CI, and gray for
-drafts and other states. Failed CI takes priority over pending checks.
-Its first row gives the bottom open PR's number and title the full width.
+centered status dot on the left: green when the displayed PR is ready, yellow
+while checks or review are pending, red for failed checks or blocked merging,
+and gray for drafts and unknown states. Failed CI takes priority over drafts.
+Its first row gives the displayed PR's number and title the full width.
 The subtitle shows time since its last update and the date it opened, with
 stack position and a numeric review conversation count plus comment icon on
 the right.
-Unavailable review counts show a dash rather than zero. One stack stays one
-card; merged parents advance the represented PR to the next unmerged member.
+Unavailable review counts show a dash rather than zero. Each recent open PR
+gets its own ticker entry, retaining its position within the full tracked stack.
 It sits 4 points below the dog and spans the dog
 and both session columns. Claude Code switches stack on the left and Codex on the right,
 each as wide as the dog; the latest chat update appears centered above it.
-The strip shows chains represented by the four most recently
-updated open PRs (provisionally using GitHub's `updatedAt`, pending a refined
-activity heuristic). It rotates through one chain at a time every eight seconds,
-pausing while hovered. Multiple recent PRs in one chain share an entry. All PRs
-remain tracked. Click to open the next unmerged PR directly at GitHub's merge
+The ticker shows up to four open PRs updated between now and three business
+days ago (Monday–Friday, at the same local time of day). An absent update date
+falls back to the creation date; unknown dates are excluded. It rotates every
+eight seconds and pauses while hovered. A bottom border has one equal-width
+segment per PR, colored by its state; the currently displayed PR's segment is
+taller. Cached entries age out locally without extra GitHub requests. All PRs
+remain tracked. Click to open the displayed PR directly at GitHub's merge
 section. Hover for the full status; hide and refresh remain available through
 the CLI. The companion stays within the
 screen edges when dragged or resized. Scorebug visibility is independent in Settings.

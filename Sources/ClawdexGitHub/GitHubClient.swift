@@ -76,12 +76,12 @@ public struct GitHubClient {
         var result = GitHubRepositoryState(repository: repository)
         result.pullRequests = prs
         result.stacks = StackDiscovery.discover(repository: repository, prs: prs, previous: previous.stacks, manual: manual)
-        // Only the represented bottom PR of each visible chain needs review
-        // metadata. This stays inside webhook-driven refreshes, not a poll.
-        let visible = GitHubBoardSelection.recentStacks(result.stacks.map { definition in
+        // Fetch review metadata for each visible recent PR, including siblings
+        // in the same chain. This remains part of webhook-driven refreshes.
+        let visible = GitHubBoardSelection.recentPullRequests(result.stacks.map { definition in
             GitHubStack(definition: definition, pullRequests: prs.filter { definition.numbers.contains($0.number) })
         })
-        for number in Set(visible.compactMap { $0.bottomPR?.number }) {
+        for number in Set(visible.map { $0.pr.number }) {
             guard let index = result.pullRequests.firstIndex(where: { $0.number == number }) else { continue }
             result.pullRequests[index].unresolvedReviewCount = try? unresolvedReviewCount(PRReference(repository: repository, number: number))
         }

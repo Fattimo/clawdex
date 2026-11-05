@@ -19,7 +19,13 @@ enum GitHubScorebugTone: Equatable {
     }
 }
 
-/// A two-line broadcast-style ticker, cycling through recent GitHub chains.
+struct GitHubScorebugSegment {
+    let id: String
+    let frame: NSRect
+    let tone: GitHubScorebugTone
+}
+
+/// A two-line ticker with a status segment for each recent PR.
 final class GitHubScorebugWindow: NSPanel {
     struct Item {
         var id: String
@@ -62,6 +68,7 @@ final class GitHubScorebugWindow: NSPanel {
     private(set) var items: [Item] = []
     private(set) var currentIndex = 0
     var currentItem: Item? { items.indices.contains(currentIndex) ? items[currentIndex] : nil }
+    var statusSegments: [GitHubScorebugSegment] { floor.statusSegments }
     private var timer: Timer?
     private let rotationInterval: TimeInterval
     private var paused = false
@@ -119,6 +126,8 @@ final class GitHubScorebugWindow: NSPanel {
         RunLoop.main.add(timer, forMode: .common); self.timer = timer
     }
     private func render(animated: Bool) {
+        floor.items = items; floor.currentIndex = currentIndex
+        floor.needsLayout = true; floor.needsDisplay = true
         guard let item = currentItem else {
             button.attributedTitle = NSAttributedString(string: "")
             button.item = nil
@@ -197,6 +206,18 @@ private final class ScorebugCommentIcon: NSImageView {
 
 private final class ScorebugView: NSView {
     var tone: GitHubScorebugTone = .neutral
+    var items: [GitHubScorebugWindow.Item] = []
+    var currentIndex = 0
+    var statusSegments: [GitHubScorebugSegment] {
+        guard !items.isEmpty, bounds.width > 0 else { return [] }
+        let gap: CGFloat = 1
+        let width = max(0, (bounds.width - gap * CGFloat(items.count - 1)) / CGFloat(items.count))
+        return items.enumerated().map { index, item in
+            GitHubScorebugSegment(id: item.id,
+                frame: NSRect(x: bounds.minX + CGFloat(index) * (width + gap), y: bounds.minY,
+                              width: width, height: index == currentIndex ? 5 : 2), tone: item.tone)
+        }
+    }
     weak var button: NSButton?
     var onHover: ((Bool) -> Void)?
     private var hoverArea: NSTrackingArea?
@@ -218,7 +239,7 @@ private final class ScorebugView: NSView {
     override func mouseDown(with event: NSEvent) { button?.performClick(nil) }
     override func layout() {
         super.layout()
-        button?.frame = NSRect(x: 25, y: 2, width: max(0, bounds.width - 33), height: bounds.height - 4)
+        button?.frame = NSRect(x: 25, y: 6, width: max(0, bounds.width - 33), height: max(0, bounds.height - 8))
     }
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsDisplay = true }
     override func draw(_ dirtyRect: NSRect) {
@@ -227,5 +248,12 @@ private final class ScorebugView: NSView {
         NSBezierPath(roundedRect: bounds, xRadius: 8, yRadius: 8).fill()
         tone.indicator(dark: dark).setFill()
         NSBezierPath(ovalIn: NSRect(x: 9, y: bounds.midY - 4, width: 8, height: 8)).fill()
+        NSGraphicsContext.saveGraphicsState()
+        NSBezierPath(roundedRect: bounds, xRadius: 8, yRadius: 8).addClip()
+        for segment in statusSegments {
+            segment.tone.indicator(dark: dark).setFill()
+            segment.frame.fill()
+        }
+        NSGraphicsContext.restoreGraphicsState()
     }
 }

@@ -3,6 +3,13 @@ import CryptoKit
 @testable import ClawdexGitHub
 
 final class GitHubTests: XCTestCase {
+    private var boardNow: Date { ISO8601DateFormatter().date(from: "2026-11-04T16:00:00Z")! }
+    private var boardCalendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian); calendar.timeZone = TimeZone(secondsFromGMT: 0)!; return calendar
+    }
+    private func recent(_ pr: GitHubPR, at date: String = "2026-11-03T12:00:00Z") -> GitHubPR {
+        var result = pr; result.updatedAt = date; return result
+    }
     func pr(_ number: Int = 1, head: String = "feature", base: String = "main", state: String = "OPEN",
             draft: Bool = false, merge: String = "CLEAN", review: String? = nil, conclusion: String? = "SUCCESS") throws -> GitHubPR {
         var object: [String: Any] = ["number": number, "title": "PR \(number)", "headRefName": head,
@@ -211,27 +218,55 @@ final class GitHubTests: XCTestCase {
         let input = try [pr(1, head: "old-work"), pr(20, head: "new-work"), pr(30, head: "other")]
         let stacks = input.enumerated().map { index, value -> GitHubStack in
             var value = value
-            value.updatedAt = ["2026-11-03T12:00:00Z", "2026-10-01T12:00:00Z", "2026-09-01T12:00:00Z"][index]
+            value.updatedAt = ["2026-11-03T12:00:00Z", "2026-11-02T12:00:00Z", "2026-11-01T12:00:00Z"][index]
             return GitHubStack(definition: StackDefinition(id: "\(value.number)", name: value.title, repository: "owner/repo", numbers: [value.number]), pullRequests: [value])
         }
-        XCTAssertEqual(GitHubBoardSelection.recentStacks(stacks, limit: 2).map(\.definition.id), ["1", "20"])
+        XCTAssertEqual(GitHubBoardSelection.recentStacks(stacks, limit: 2, now: boardNow, calendar: boardCalendar).map(\.definition.id), ["1", "20"])
     }
     func testFourRecentPRsShareTheirWholeChainWithoutBackfillingExtraCards() throws {
-        let chain = GitHubStack(definition: StackDefinition(id: "chain", name: "Chain", repository: "owner/repo", numbers: [8, 9]), pullRequests: try [pr(8), pr(9, head: "tip")])
+        let chain = GitHubStack(definition: StackDefinition(id: "chain", name: "Chain", repository: "owner/repo", numbers: [8, 9]), pullRequests: try [recent(pr(8)), recent(pr(9, head: "tip"))])
         let singles = try (1...7).map { n in
-            GitHubStack(definition: StackDefinition(id: "\(n)", name: "Single", repository: "owner/repo", numbers: [n]), pullRequests: [try pr(n)])
+            GitHubStack(definition: StackDefinition(id: "\(n)", name: "Single", repository: "owner/repo", numbers: [n]), pullRequests: [try recent(pr(n))])
         }
-        let selected = GitHubBoardSelection.recentStacks(singles + [chain])
+        let selected = GitHubBoardSelection.recentStacks(singles + [chain], now: boardNow, calendar: boardCalendar)
         XCTAssertEqual(selected.map(\.definition.id), ["chain", "7", "6"])
         XCTAssertEqual(selected[0].pullRequests.map(\.number), [8, 9])
+        XCTAssertEqual(GitHubBoardSelection.recentPullRequests(singles + [chain], now: boardNow, calendar: boardCalendar).map(\.pr.number), [9, 8, 7, 6])
     }
     func testRecentSelectionExcludesClosedAndMergedPRsAndDecodesOldCache() throws {
         let old = try pr(1)
         XCTAssertNil(old.updatedAt)
-        let stacks = try [pr(1), pr(10, state: "CLOSED"), pr(20, state: "MERGED")].map { value in
+        let stacks = try [recent(pr(1)), recent(pr(10, state: "CLOSED")), recent(pr(20, state: "MERGED")), pr(30)].map { value in
             GitHubStack(definition: StackDefinition(id: "\(value.number)", name: value.title, repository: "owner/repo", numbers: [value.number]), pullRequests: [value])
         }
-        XCTAssertEqual(GitHubBoardSelection.recentStacks(stacks).map(\.definition.id), ["1"])
+        XCTAssertEqual(GitHubBoardSelection.recentStacks(stacks, now: boardNow, calendar: boardCalendar).map(\.definition.id), ["1"])
         XCTAssertTrue(GitHubBoardSelection.recentStacks(stacks, limit: 0).isEmpty)
+    }
+
+    func testBusinessDayWindowSkipsWeekendsAndIncludesExactBoundary() throws {
+        let formatter = ISO8601DateFormatter()
+        XCTAssertEqual(GitHubBoardSelection.businessDayCutoff(now: boardNow, calendar: boardCalendar), formatter.date(from: "2026-10-30T16:00:00Z"))
+        let monday = formatter.date(from: "2026-11-09T16:00:00Z")!
+        XCTAssertEqual(GitHubBoardSelection.businessDayCutoff(now: monday, calendar: boardCalendar), formatter.date(from: "2026-11-04T16:00:00Z"))
+        let values = try [
+            recent(pr(1), at: "2026-10-30T15:59:59Z"),
+            recent(pr(2), at: "2026-10-30T16:00:00Z"),
+            recent(pr(3), at: "2026-11-01T12:00:00Z"),
+            recent(pr(4), at: "2026-11-04T16:00:00Z"),
+            recent(pr(5), at: "2026-11-04T16:00:01Z"),
+            recent(pr(6), at: "invalid")
+        ]
+        let stacks = values.map { GitHubStack(definition: StackDefinition(name: "PR", repository: "owner/repo", numbers: [$0.number]), pullRequests: [$0]) }
+        XCTAssertEqual(GitHubBoardSelection.recentPullRequests(stacks, limit: 20, now: boardNow, calendar: boardCalendar).map(\.pr.number), [4, 3, 2])
+    }
+
+    func testOldPRWithRecentActivityQualifiesAndCreationDateIsFallback() throws {
+        var updated = try recent(pr(1))
+        updated.createdAt = "2020-01-01T12:00:00Z"
+        var created = try pr(2)
+        created.createdAt = "2026-11-02T12:00:00.123Z"
+        let first = GitHubStack(definition: StackDefinition(id: "first", name: "PR", repository: "owner/repo", numbers: [1, 2]), pullRequests: [updated, created])
+        let duplicate = GitHubStack(definition: StackDefinition(id: "second", name: "PR", repository: "owner/repo", numbers: [1]), pullRequests: [updated])
+        XCTAssertEqual(GitHubBoardSelection.recentPullRequests([first, duplicate], now: boardNow, calendar: boardCalendar).map(\.pr.number), [1, 2])
     }
 }

@@ -154,28 +154,52 @@ public struct GitHubStack: Codable, Equatable {
     }
 }
 
-/// Provisional recency rule, kept separate from discovery and readiness so the
-/// user-facing activity heuristic can evolve without changing tracked chains.
+/// Display recency is independent of tracked stack membership/readiness.
 public enum GitHubBoardSelection {
-    public static func recentStacks(_ stacks: [GitHubStack], limit: Int = 4) -> [GitHubStack] {
+    public static func businessDayCutoff(now: Date, calendar: Calendar = .current) -> Date {
+        var cutoff = now, remaining = 3
+        while remaining > 0 {
+            guard let previous = calendar.date(byAdding: .day, value: -1, to: cutoff) else { return cutoff }
+            cutoff = previous
+            if ![1, 7].contains(calendar.component(.weekday, from: cutoff)) { remaining -= 1 }
+        }
+        return cutoff
+    }
+
+    public static func recentPullRequests(_ stacks: [GitHubStack], limit: Int = 4,
+                                          now: Date = Date(), calendar: Calendar = .current) -> [(stack: GitHubStack, pr: GitHubPR)] {
         guard limit > 0 else { return [] }
+        let cutoff = businessDayCutoff(now: now, calendar: calendar)
+        let formatter = ISO8601DateFormatter()
+        let fractional = ISO8601DateFormatter(); fractional.formatOptions.insert(.withFractionalSeconds)
         let candidates = stacks.flatMap { stack in
-            stack.pullRequests.filter { $0.state == "OPEN" }.map { (stack: stack, pr: $0) }
+            stack.pullRequests.compactMap { pr -> (stack: GitHubStack, pr: GitHubPR, updated: Date)? in
+                guard pr.state == "OPEN", let value = pr.updatedAt ?? pr.createdAt,
+                      let updated = formatter.date(from: value) ?? fractional.date(from: value),
+                      updated >= cutoff, updated <= now else { return nil }
+                return (stack, pr, updated)
+            }
         }.sorted {
-            let a = $0.pr.updatedAt ?? "", b = $1.pr.updatedAt ?? ""
-            if a != b { return a > b }
+            if $0.updated != $1.updated { return $0.updated > $1.updated }
             if $0.pr.number != $1.pr.number { return $0.pr.number > $1.pr.number }
             return $0.stack.definition.id < $1.stack.definition.id
         }
-        var prs = Set<String>(), chains = Set<String>()
-        var result: [GitHubStack] = []
+        var prs = Set<String>()
+        var result: [(stack: GitHubStack, pr: GitHubPR)] = []
         for candidate in candidates {
-            let ref = "\(candidate.stack.definition.repository)#\(candidate.pr.number)"
+            let ref = "\(candidate.stack.definition.repository.lowercased())#\(candidate.pr.number)"
             guard prs.insert(ref).inserted else { continue }
-            if prs.count > limit { break }
-            if chains.insert(candidate.stack.definition.id).inserted { result.append(candidate.stack) }
+            result.append((candidate.stack, candidate.pr))
+            if result.count == limit { break }
         }
         return result
+    }
+
+    public static func recentStacks(_ stacks: [GitHubStack], limit: Int = 4,
+                                    now: Date = Date(), calendar: Calendar = .current) -> [GitHubStack] {
+        var seen = Set<String>()
+        return recentPullRequests(stacks, limit: limit, now: now, calendar: calendar)
+            .compactMap { seen.insert($0.stack.definition.id).inserted ? $0.stack : nil }
     }
 }
 

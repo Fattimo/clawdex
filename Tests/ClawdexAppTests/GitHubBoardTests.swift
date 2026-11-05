@@ -89,7 +89,14 @@ final class GitHubBoardTests: XCTestCase {
         XCTAssertEqual(item.tone, .ready)
         XCTAssertTrue(item.metadata(now: try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-11-03T14:00:00Z"))).contains("Updated 2h ago"))
         XCTAssertTrue(item.metadata().contains("opened"))
-        XCTAssertEqual(try GitHubBoardController.item(for: stack(pending: true), issue: nil)?.tone, .pending)
+        // A sibling's pending checks do not change this PR's own state.
+        XCTAssertEqual(try GitHubBoardController.item(for: stack(pending: true), issue: nil)?.tone, .ready)
+        let pendingStack = try stack(pending: true)
+        let pendingPR = try XCTUnwrap(pendingStack.pullRequests.first { $0.number == 3 })
+        let pendingItem = try XCTUnwrap(GitHubBoardController.item(for: pendingStack, pullRequest: pendingPR, issue: nil))
+        XCTAssertEqual(pendingItem.tone, .pending)
+        XCTAssertEqual(pendingItem.number, 3)
+        XCTAssertEqual(pendingItem.stackPosition, "3/3")
         XCTAssertEqual(try GitHubBoardController.item(for: stack(pending: true, failed: true), issue: nil)?.tone, .failed)
         XCTAssertEqual(try GitHubBoardController.item(for: stack(draft: true, failed: true), issue: nil)?.tone, .failed)
         XCTAssertEqual(try GitHubBoardController.item(for: stack(mergedFailure: true), issue: nil)?.tone, .ready)
@@ -135,6 +142,32 @@ final class GitHubBoardTests: XCTestCase {
         XCTAssertEqual(window.currentItem?.id, "chain-1")
     }
 
+    func testBottomSegmentsMatchEachPRAndActiveSegmentFollowsRotation() throws {
+        let window = GitHubScorebugWindow()
+        defer { window.close() }
+        var cards = Array(items().prefix(4))
+        let tones: [GitHubScorebugTone] = [.ready, .pending, .failed, .neutral]
+        for index in cards.indices { cards[index].tone = tones[index] }
+        window.setItems(cards); window.orderFrontRegardless()
+        let view = try XCTUnwrap(window.contentView)
+        view.layoutSubtreeIfNeeded()
+        let segments = window.statusSegments
+        XCTAssertEqual(segments.map(\.id), cards.map(\.id))
+        XCTAssertEqual(segments.map(\.tone), tones)
+        XCTAssertEqual(segments.map(\.frame.height), [5, 2, 2, 2])
+        XCTAssertEqual(segments.first?.frame.minX, view.bounds.minX)
+        XCTAssertEqual(segments.last?.frame.maxX, view.bounds.maxX)
+        XCTAssertGreaterThanOrEqual(window.button.frame.minY, 6)
+        for index in 1..<segments.count {
+            XCTAssertEqual(segments[index].frame.minX - segments[index - 1].frame.maxX, 1, accuracy: 0.01)
+        }
+        window.advance()
+        XCTAssertEqual(window.statusSegments.map(\.frame.height), [2, 5, 2, 2])
+        XCTAssertEqual(window.statusSegments[1].id, window.currentItem?.id)
+        window.setItems([])
+        XCTAssertTrue(window.statusSegments.isEmpty)
+    }
+
     func testClickDestinationSkipsMergedAndClosedParentsInDefinitionOrder() throws {
         func pr(_ number: Int, state: String) throws -> GitHubPR {
             let object: [String: Any] = ["number": number, "title": "PR \(number)", "headRefName": "feature-\(number)",
@@ -144,6 +177,8 @@ final class GitHubBoardTests: XCTestCase {
         let prs = try [pr(4, state: "OPEN"), pr(2, state: "CLOSED"), pr(1, state: "MERGED"), pr(3, state: "OPEN")]
         let url = GitHubBoardNavigation.mergeURL(repository: "owner/repo", orderedNumbers: [1,2,3,4], pullRequests: prs)
         XCTAssertEqual(url?.absoluteString, "https://github.com/owner/repo/pull/3#partial-pull-merging")
+        XCTAssertEqual(GitHubBoardNavigation.mergeURL(repository: "owner/repo", orderedNumbers: [4], pullRequests: prs)?.absoluteString,
+                       "https://github.com/owner/repo/pull/4#partial-pull-merging")
         XCTAssertNil(GitHubBoardNavigation.mergeURL(repository: "owner/repo", orderedNumbers: [1,2], pullRequests: prs))
         XCTAssertNil(GitHubBoardNavigation.mergeURL(repository: "other.example/repo/extra", orderedNumbers: [3], pullRequests: prs))
     }

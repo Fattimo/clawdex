@@ -50,6 +50,11 @@ final class PillWindow: NSPanel {
     override var canBecomeMain: Bool { false }
 
     /// Set the pill's label / state and resize to fit. Returns the new size.
+    var halfDot: PillHalfDot? {
+        get { view.halfDot }
+        set { view.halfDot = newValue }
+    }
+
     @discardableResult
     func setContent(label text: String, lit: Bool, accent: NSColor, fixedWidth: CGFloat? = nil, neutral: Bool = false) -> NSSize {
         view.title = text
@@ -100,6 +105,13 @@ final class PillWindow: NSPanel {
 
 /// Capsule with a status dot + label. Lit = accent-tinted, ringed, solid dot;
 /// dim = neutral capsule, hollow dot, muted text.
+/// Which half of a working pill's dot is filled while its subagents run.
+enum PillHalfDot: Equatable {
+    case left, right
+    var flipped: PillHalfDot { self == .left ? .right : .left }
+    var marker: String { self == .left ? "◐" : "◑" }
+}
+
 final class PillView: NSView {
     static let padL: CGFloat = 9
     static let padR: CGFloat = 11
@@ -111,6 +123,8 @@ final class PillView: NSView {
     var title = "" { didSet { needsDisplay = true } }
     var lit = false { didSet { needsDisplay = true } }
     var neutral = false { didSet { needsDisplay = true } }
+    /// Set while subagents are running; drawn only on a working (dim) pill.
+    var halfDot: PillHalfDot? { didSet { if halfDot != oldValue { needsDisplay = true } } }
     var accent: NSColor = .systemBlue { didSet { needsDisplay = true } }
     var onClick: (() -> Void)?
     var onClose: (() -> Void)?
@@ -201,7 +215,20 @@ final class PillView: NSView {
         let dotRect = NSRect(x: Self.padL, y: cy - Self.dotSize / 2,
                              width: Self.dotSize, height: Self.dotSize)
         let dot = NSBezierPath(ovalIn: dotRect)
-        if lit || neutral {
+        if let halfDot, !neutral {
+            // Half-filled while subagents work, whether the main turn is
+            // still going or already waiting on you; swaps sides as they
+            // make progress. A ready pill keeps its lit capsule.
+            NSGraphicsContext.saveGraphicsState()
+            let half = NSRect(x: halfDot == .left ? dotRect.minX : dotRect.midX, y: dotRect.minY,
+                              width: dotRect.width / 2, height: dotRect.height)
+            NSBezierPath(rect: half).addClip()
+            accent.setFill(); dot.fill()
+            NSGraphicsContext.restoreGraphicsState()
+            accent.withAlphaComponent(lit ? 1 : 0.9).setStroke()
+            dot.lineWidth = 1.5
+            dot.stroke()
+        } else if lit || neutral {
             accent.setFill(); dot.fill()
         } else {
             accent.withAlphaComponent(0.6).setStroke()

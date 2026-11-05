@@ -59,6 +59,7 @@ final class SpeechController {
         var kitty = KittyTarget()   // kitty window to focus, when launched in kitty
         var paintedLit: Bool?       // last readiness painted onto the kitty tab
         var paintedNeutral: Bool?
+        var paintedHalfDot: PillHalfDot?
         var paintedKitty: KittyTarget? // actual client tab, not the hook server's
         var paintingKitty = false
         var agent = ""
@@ -79,6 +80,13 @@ final class SpeechController {
         /// Running Claude Code subagents (agent_id → last event), shown as a
         /// count badge beside the pill instead of pills of their own.
         var subagents: [String: Date] = [:]
+        /// Side of the half-filled dot while subagents run; swaps on their
+        /// activity, at most once per `halfDotFlipInterval`.
+        var halfDotSide: PillHalfDot = .left
+        var lastHalfDotFlip = Date.distantPast
+        /// The half dot to show while subagents run — on a working or a ready
+        /// pill — or nil when neutral or none run.
+        var halfDot: PillHalfDot? { neutral || subagents.isEmpty ? nil : halfDotSide }
         let badge = SubagentBadgeWindow()
         var badgeAttached = false
         var badgeContent: SubagentBadgeView.Content?
@@ -681,7 +689,8 @@ final class SpeechController {
     /// per hook event.
     private func paintKittyTab(_ pill: Pill, source: String) {
         guard !pill.kitty.isEmpty, !pill.paintingKitty,
-              pill.paintedLit != pill.lit || pill.paintedNeutral != pill.neutral else { return }
+              pill.paintedLit != pill.lit || pill.paintedNeutral != pill.neutral
+                || pill.paintedHalfDot != pill.halfDot else { return }
         pill.paintingKitty = true
         let reported = pill.kitty
         let root = pill.root
@@ -689,12 +698,15 @@ final class SpeechController {
         let clientPID = pill.observedProcessID
         let lit = pill.lit
         let neutral = pill.neutral
+        let halfDot = pill.halfDot
         let accent = Self.rgb(color(for: source))
         let colors: [String]
         if neutral {
             colors = ["active_bg=#101318", "inactive_bg=#101318",
                       "active_fg=" + Self.hex(accent), "inactive_fg=" + Self.hex(accent)]
         } else if pill.lit {
+            // active_fg=#ffffff also tells kitty's tab_bar.py that a ◐/◑ tab is
+            // ready (subagents still running) rather than working.
             colors = ["active_bg=" + Self.hex(accent),
                       "active_fg=#ffffff",
                       "inactive_bg=" + Self.hex(Self.mix(accent, (0, 0, 0), 0.5)),
@@ -712,7 +724,7 @@ final class SpeechController {
             var success = false
             if let target, let sock = Self.kittyTarget(target) {
                 let colored = Self.execKitten(sock, ["set-tab-color", "--match", "window_id:" + target.window] + colors) != nil
-                let titled = Self.markKittyTabOnQueue(target, marker: neutral ? Self.neutralMarker : (lit ? Self.readyMarker : Self.workingMarker))
+                let titled = Self.markKittyTabOnQueue(target, marker: neutral ? Self.neutralMarker : (halfDot?.marker ?? (lit ? Self.readyMarker : Self.workingMarker)))
                 success = colored && titled
             }
             let painted = success
@@ -730,10 +742,10 @@ final class SpeechController {
                     pill.paintedKitty = target
                     if let previous, previous != target { self.clearKittyIfUnclaimed(previous) }
                 }
-                if painted { pill.paintedLit = lit; pill.paintedNeutral = neutral }
+                if painted { pill.paintedLit = lit; pill.paintedNeutral = neutral; pill.paintedHalfDot = halfDot }
                 // If another event arrived while these commands ran, catch up
                 // once. A failure alone waits for the next event before retry.
-                if pill.lit != lit || pill.neutral != neutral || pill.kitty != reported || pill.observedProcessID != clientPID {
+                if pill.lit != lit || pill.neutral != neutral || pill.halfDot != halfDot || pill.kitty != reported || pill.observedProcessID != clientPID {
                     pill.paintedLit = nil
                     self.paintKittyTab(pill, source: source)
                 }
@@ -768,7 +780,7 @@ final class SpeechController {
     }
 
     private static func stripMarker(_ title: String) -> String {
-        for m in [readyMarker, workingMarker, neutralMarker] where title.hasPrefix(m + " ") {
+        for m in [readyMarker, workingMarker, neutralMarker, PillHalfDot.left.marker, PillHalfDot.right.marker] where title.hasPrefix(m + " ") {
             return String(title.dropFirst(m.count + 1))
         }
         return title
@@ -1013,6 +1025,7 @@ final class SpeechController {
             pill.size = pill.window.setContent(label: label, lit: pill.lit,
                                                accent: self.color(for: source), neutral: pill.neutral)
             pill.badge.accent = self.color(for: source)
+            pill.window.halfDot = pill.halfDot
             self.paintKittyTab(pill, source: source)
             self.refreshBadge(pill)
             self.relayoutPills()
@@ -1040,6 +1053,7 @@ final class SpeechController {
             let before = pill.subagents.count
             pill.subagents = pill.subagents.filter { now.timeIntervalSince($0.value) <= pillIdleTimeout }
             if pill.subagents.count != before {
+                applyHalfDot(pill, source: source)
                 refreshBadge(pill)
                 badgesChanged = true
             }
@@ -1135,10 +1149,24 @@ final class SpeechController {
                 // running, so the count self-heals after a missed start.
                 pill.subagents[id] = stopped ? nil : Date()
             }
-            pill.lastSeen = Date()
+            let now = Date()
+            pill.lastSeen = now
+            if !stopped, now.timeIntervalSince(pill.lastHalfDotFlip) >= Self.halfDotFlipInterval {
+                pill.halfDotSide = pill.halfDotSide.flipped
+                pill.lastHalfDotFlip = now
+            }
+            self.applyHalfDot(pill, source: source)
             self.refreshBadge(pill)
             self.relayoutPills()
         }
+    }
+
+    private static let halfDotFlipInterval: TimeInterval = 1
+
+    /// Sync the pill's half-filled dot and kitty marker with its subagents.
+    private func applyHalfDot(_ pill: Pill, source: String) {
+        pill.window.halfDot = pill.halfDot
+        paintKittyTab(pill, source: source)
     }
 
     /// The badge a pill should show, highest priority first: running subagents

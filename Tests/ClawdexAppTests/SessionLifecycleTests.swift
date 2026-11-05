@@ -205,10 +205,10 @@ final class SessionLifecycleTests: XCTestCase {
         }
     }
 
-    func testCodexThreadEndBeforeReplacementStartNeutralizesLiveClient() throws {
+    func testCodexThreadEndNeedsEmptyPromptEvidenceBeforeNeutralizing() throws {
         let pet = PetWindow()
         let speech = SpeechController(pet: pet, config: ClawdexConfig(messageVisibility: .none))
-        let client = KittySessionResolver.Client(window: "11", processID: 101, agent: "codex", root: "/tmp/demo")
+        var client = KittySessionResolver.Client(window: "11", processID: 101, agent: "codex", root: "/tmp/demo")
         speech.reconcileKittySessions([client], socket: socket)
         func send(_ event: String, session: String = "old") {
             speech.handle(event: event, narration: nil, transcriptPath: nil,
@@ -221,6 +221,9 @@ final class SessionLifecycleTests: XCTestCase {
         send("SessionEnd"); settle()
         speech.reconcileKittySessions([client], socket: socket); settle()
         XCTAssertEqual(activePills(pet).count, 1)
+        XCTAssertTrue(view.lit); XCTAssertFalse(view.neutral)
+        client.emptyPromptObservedAt = Date()
+        speech.reconcileKittySessions([client], socket: socket); settle()
         XCTAssertTrue(view.neutral); XCTAssertFalse(view.lit)
         send("Stop"); settle(); XCTAssertTrue(view.neutral)
         send("UserPromptSubmit", session: "new"); settle()
@@ -230,6 +233,43 @@ final class SessionLifecycleTests: XCTestCase {
         XCTAssertTrue(view.lit); XCTAssertFalse(view.neutral)
         speech.reconcileKittySessions([], socket: socket); settle()
         XCTAssertTrue(activePills(pet).isEmpty)
+    }
+
+    func testResumeReactivatesSameRetiredThreadAndRestoresSavedReadiness() throws {
+        let thread = "44444444-4444-4444-8444-444444444444"
+        let temp = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temp) }
+        let file = temp.appendingPathComponent("rollout-\(thread).jsonl")
+        let header = "{\"type\":\"session_meta\",\"payload\":{\"id\":\"\(thread)\",\"source\":\"vscode\"}}\n"
+        try (header + "{\"type\":\"event_msg\",\"payload\":{\"type\":\"task_complete\"}}\n")
+            .write(to: file, atomically: true, encoding: .utf8)
+        let pet = PetWindow()
+        let speech = SpeechController(pet: pet, config: ClawdexConfig(messageVisibility: .none))
+        var client = KittySessionResolver.Client(window: "11", processID: 101, agent: "codex", root: "/tmp/demo")
+        speech.reconcileKittySessions([client], socket: socket)
+        func send(_ event: String, source: String = "", turn: String = "turn") {
+            speech.handle(event: event, narration: nil, transcriptPath: file.path,
+                source: "demo", root: client.root, agent: "codex", sessionID: thread, sessionSource: source, turnID: turn)
+        }
+        send("SessionStart"); send("Stop"); settle()
+        let view = try XCTUnwrap(activePills(pet).first?.contentView as? PillView)
+        client.emptyPromptObservedAt = Date()
+        speech.reconcileKittySessions([client], socket: socket); settle()
+        XCTAssertTrue(view.neutral)
+        send("SessionStart", source: "resume"); settle()
+        XCTAssertFalse(view.neutral); XCTAssertTrue(view.lit)
+        client.emptyPromptObservedAt = .distantPast
+        speech.reconcileKittySessions([client], socket: socket); settle()
+        XCTAssertFalse(view.neutral)
+        send("UserPromptSubmit"); settle(); XCTAssertFalse(view.lit)
+        send("Stop"); settle(); XCTAssertTrue(view.lit)
+        send("SessionEnd"); settle(); XCTAssertTrue(view.lit); XCTAssertFalse(view.neutral)
+        try (header + "{\"type\":\"event_msg\",\"payload\":{\"type\":\"task_started\",\"turn_id\":\"running\"}}\n")
+            .write(to: file, atomically: true, encoding: .utf8)
+        send("SessionStart", source: "resume"); settle()
+        XCTAssertFalse(view.neutral); XCTAssertFalse(view.lit, "Resume must restore an in-flight turn as busy")
+        send("Stop", turn: "running"); settle(); XCTAssertTrue(view.lit)
     }
 
     func testObservedEmptyCodexScreenNeutralizesWithoutAnyClearHook() throws {

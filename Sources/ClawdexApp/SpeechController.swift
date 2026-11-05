@@ -351,6 +351,11 @@ final class SpeechController {
         // sees — it marks non-Claude agents (e.g. "pylon ·cdx").
         let src = repo.isEmpty ? "" : self.sessionSource(repo: repo, root: root ?? "", agent: agentTag,
             sessionID: sessionID, transcript: transcriptPath ?? "")
+        let threadID = Self.threadID(fromTranscript: transcriptPath ?? "")
+        let resuming = agentTag == "codex" && event == "SessionStart" && sessionSource == "resume"
+            && UUID(uuidString: sessionID) != nil
+            && (threadID.isEmpty || threadID.lowercased() == sessionID.lowercased())
+        if resuming { pills[src]?.retiredSessionIDs.removeAll { $0 == sessionID } }
         if agentTag == "codex", !sessionID.isEmpty,
            pills[src]?.retiredSessionIDs.contains(sessionID) == true { return }
         // Internal clients can emit hooks without a transcript or agent_id.
@@ -359,16 +364,15 @@ final class SpeechController {
         if agentTag == "codex", (transcriptPath ?? "").isEmpty,
            let pill = pills[src], (!pill.lit || pill.neutral), !pill.sessionID.isEmpty,
            !sessionID.isEmpty, sessionID != pill.sessionID,
-           !(pill.neutral && event == "UserPromptSubmit") { return }
+           !(pill.neutral && event == "UserPromptSubmit"), !resuming { return }
         let label = Self.displayLabel(repo: repo, agent: agentTag)
         // Codex conversation id, recovered from the rollout transcript filename,
         // so a pill click can deep-link straight to that thread.
-        let threadID = Self.threadID(fromTranscript: transcriptPath ?? "")
         if agentTag == "codex" {
             if let bound = pills[src]?.observedThreadID, !bound.isEmpty,
-               Self.isCodexBackgroundFork(path: transcriptPath ?? "", foregroundThreadID: bound) { return }
+               !resuming, Self.isCodexBackgroundFork(path: transcriptPath ?? "", foregroundThreadID: bound) { return }
             rememberCodexTranscript(transcriptPath ?? "", threadID: threadID)
-            if event == "SessionStart", sessionSource == "clear", !threadID.isEmpty {
+            if event == "SessionStart", ["clear", "resume"].contains(sessionSource), !threadID.isEmpty {
                 pills[src]?.observedThreadID = threadID
             }
         }
@@ -406,7 +410,7 @@ final class SpeechController {
                        compacting: event == "PreCompact",
                        turnEnded: event == "Stop" || event == "StopFailure" || event == "Interrupt", sessionID: sessionID,
                        sessionStarted: event == "SessionStart", event: event, turnID: turnID,
-                       sessionCleared: event == "SessionStart" && sessionSource == "clear")
+                       sessionCleared: event == "SessionStart" && sessionSource == "clear", sessionResumed: resuming)
         }
 
         // A user prompt (or session start) begins a NEW turn: there's no new
@@ -938,7 +942,7 @@ final class SpeechController {
                             threadID: String, transcriptPath: String, app: String,
                             kitty: KittyTarget, lit: Bool?, compacting: Bool,
                             turnEnded: Bool = false, sessionID: String = "", sessionStarted: Bool = false,
-                            event: String = "", turnID: String = "", sessionCleared: Bool = false) {
+                            event: String = "", turnID: String = "", sessionCleared: Bool = false, sessionResumed: Bool = false) {
         let update = { [weak self] in
             guard let self = self, let pet = self.pet else { return }
             let pill: Pill
@@ -968,10 +972,14 @@ final class SpeechController {
             if !threadID.isEmpty { pill.threadID = threadID }
             if !app.isEmpty { pill.app = app }
             if !kitty.isEmpty, pill.observedClientID == nil, pill.kitty != kitty { pill.kitty = kitty; pill.paintedLit = nil }
+            if sessionResumed {
+                pill.neutral = false; pill.activeTurnID = ""; pill.transcript = TranscriptScan()
+                pill.observedThreadID = threadID.isEmpty ? sessionID : threadID
+            }
             // Start watching a transcript from its current end; after that the
             // poller reads it continuously, so lines written just before this
             // event (e.g. the tool_use a PreToolUse announces) aren't skipped.
-            if !transcriptPath.isEmpty, transcriptPath != pill.transcriptPath {
+            if !transcriptPath.isEmpty, transcriptPath != pill.transcriptPath || sessionResumed {
                 pill.transcriptPath = transcriptPath
                 let initial = Self.transcriptSnapshot(path: transcriptPath)
                 pill.transcriptOffset = initial.offset
@@ -1064,13 +1072,8 @@ final class SpeechController {
             if !sessionID.isEmpty, !pill.sessionID.isEmpty, sessionID != pill.sessionID { return }
             if !transcriptPath.isEmpty, !pill.transcriptPath.isEmpty, transcriptPath != pill.transcriptPath { return }
             if pill.observedClientID != nil {
-                // Codex /clear ends the old thread before a replacement
-                // SessionStart exists. The CLI still owns the tab: show its
-                // empty prompt as neutral until new activity arrives.
-                if pill.agent == "codex" {
-                    self.neutralizeCodexClient(source: source)
-                }
-                // Presence removes the entry if the CLI actually exited.
+                // A thread end can precede resume or replacement. Only a
+                // verified empty prompt means clear; presence handles exits.
                 if self.kittyDiscoveryTimer != nil { self.discoverKittySessions() }
                 return
             }

@@ -6,3 +6,4 @@ test-pets/
 *.xcodeproj
 .vscode/
 /output/native-companion-preview/render
+__pycache__/

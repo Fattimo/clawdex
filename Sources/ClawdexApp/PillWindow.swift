@@ -61,9 +61,9 @@ final class PillWindow: NSPanel {
         view.lit = lit && !neutral
         view.neutral = neutral
         view.accent = accent
-        // Dim/neutral pills fade the capsule, not the window, so the label
-        // can stay at full strength.
-        view.bodyAlpha = neutral ? 0.85 : (lit ? 1.0 : 0.55)
+        // A neutral (inert) pill fades its capsule, not the window, so its
+        // label stays at full strength. Working pills fade the whole window.
+        view.bodyAlpha = neutral ? 0.85 : 1.0
 
         let tw = min(Self.maxLabelWidth,
                      ceil((text as NSString).size(withAttributes: [.font: PillView.font]).width) + 1)
@@ -77,7 +77,7 @@ final class PillWindow: NSPanel {
 
         // Settle to the state's resting alpha. Animate only if already shown so
         // a lit→dim transition fades smoothly; first show is handled by fadeIn.
-        restingAlpha = 1.0
+        restingAlpha = (lit || neutral) ? 1.0 : 0.55
         if alphaValue > 0.01 {
             NSAnimationContext.runAnimationGroup { ctx in
                 ctx.duration = 0.18
@@ -107,7 +107,8 @@ final class PillWindow: NSPanel {
 }
 
 /// Capsule with a status dot + label. Lit = accent-tinted, ringed, solid dot;
-/// dim = faded neutral capsule, hollow dot, full-strength text.
+/// dim = neutral capsule, hollow dot, muted text; inert (neutral) = faded
+/// capsule with full-strength text.
 /// Which half of a working pill's dot is filled while its subagents run.
 enum PillHalfDot: Equatable {
     case left, right
@@ -247,8 +248,8 @@ final class PillView: NSView {
         ctx?.endTransparencyLayer()
         ctx?.setAlpha(1)
 
-        // Label — full-strength on every pill; only the capsule dims.
-        let textColor: NSColor = (lit && dark) ? .white : .labelColor
+        // Label — full-strength when lit or inert, muted while working.
+        let textColor: NSColor = lit ? (dark ? .white : .labelColor) : (neutral ? .labelColor : .tertiaryLabelColor)
         let paragraph = NSMutableParagraphStyle()
         paragraph.lineBreakMode = .byTruncatingTail
         let attrs: [NSAttributedString.Key: Any] = [.font: Self.font, .foregroundColor: textColor, .paragraphStyle: paragraph]

@@ -61,6 +61,9 @@ final class PillWindow: NSPanel {
         view.lit = lit && !neutral
         view.neutral = neutral
         view.accent = accent
+        // Dim/neutral pills fade the capsule, not the window, so the label
+        // can stay at full strength.
+        view.bodyAlpha = neutral ? 0.85 : (lit ? 1.0 : 0.55)
 
         let tw = min(Self.maxLabelWidth,
                      ceil((text as NSString).size(withAttributes: [.font: PillView.font]).width) + 1)
@@ -74,7 +77,7 @@ final class PillWindow: NSPanel {
 
         // Settle to the state's resting alpha. Animate only if already shown so
         // a lit→dim transition fades smoothly; first show is handled by fadeIn.
-        restingAlpha = neutral ? 0.85 : (lit ? 1.0 : 0.55)
+        restingAlpha = 1.0
         if alphaValue > 0.01 {
             NSAnimationContext.runAnimationGroup { ctx in
                 ctx.duration = 0.18
@@ -104,7 +107,7 @@ final class PillWindow: NSPanel {
 }
 
 /// Capsule with a status dot + label. Lit = accent-tinted, ringed, solid dot;
-/// dim = neutral capsule, hollow dot, muted text.
+/// dim = faded neutral capsule, hollow dot, full-strength text.
 /// Which half of a working pill's dot is filled while its subagents run.
 enum PillHalfDot: Equatable {
     case left, right
@@ -126,6 +129,8 @@ final class PillView: NSView {
     /// Set while subagents are running; drawn only on a working (dim) pill.
     var halfDot: PillHalfDot? { didSet { if halfDot != oldValue { needsDisplay = true } } }
     var accent: NSColor = .systemBlue { didSet { needsDisplay = true } }
+    /// Opacity of the capsule, border, dot and close glyph — never the label.
+    var bodyAlpha: CGFloat = 1 { didSet { if bodyAlpha != oldValue { needsDisplay = true } } }
     var onClick: (() -> Void)?
     var onClose: (() -> Void)?
 
@@ -195,6 +200,9 @@ final class PillView: NSView {
         let r = bounds.insetBy(dx: 0.5, dy: 0.5)
         let radius = r.height / 2
         let path = NSBezierPath(roundedRect: r, xRadius: radius, yRadius: radius)
+        let ctx = NSGraphicsContext.current?.cgContext
+        ctx?.setAlpha(bodyAlpha)
+        ctx?.beginTransparencyLayer(auxiliaryInfo: nil)
 
         // Capsule fill: bright neutral + accent wash when lit; flatter and
         // greyer when dim so the pill reads as switched-off.
@@ -236,8 +244,11 @@ final class PillView: NSView {
             dot.stroke()
         }
 
-        // Label.
-        let textColor: NSColor = lit ? (dark ? .white : .labelColor) : (neutral ? .secondaryLabelColor : .tertiaryLabelColor)
+        ctx?.endTransparencyLayer()
+        ctx?.setAlpha(1)
+
+        // Label — full-strength on every pill; only the capsule dims.
+        let textColor: NSColor = (lit && dark) ? .white : .labelColor
         let paragraph = NSMutableParagraphStyle()
         paragraph.lineBreakMode = .byTruncatingTail
         let attrs: [NSAttributedString.Key: Any] = [.font: Self.font, .foregroundColor: textColor, .paragraphStyle: paragraph]
@@ -248,6 +259,8 @@ final class PillView: NSView {
         (title as NSString).draw(in: drawRect, withAttributes: attrs)
 
         if isHovering {
+            ctx?.setAlpha(bodyAlpha)
+            defer { ctx?.setAlpha(1) }
             let close = closeRect()
             let inset = close.insetBy(dx: 2.8, dy: 2.8)
             let x = NSBezierPath()

@@ -388,4 +388,24 @@ final class SessionLifecycleTests: XCTestCase {
             source: "demo", root: "/tmp/demo", agent: "codex", turnID: "first")
         settle(); XCTAssertEqual(pill.alphaValue, 0.55, accuracy: 0.02)
     }
+
+    func testIdleCompactionRestoresReadinessButMidTurnCompactionStaysDim() throws {
+        let pet = PetWindow()
+        let speech = SpeechController(pet: pet, config: ClawdexConfig(messageVisibility: .none))
+        func send(_ event: String, _ source: String = "") {
+            speech.handle(event: event, narration: nil, transcriptPath: nil,
+                source: "demo", root: "/tmp/demo", agent: "claude", sessionID: "s", sessionSource: source)
+            settle()
+        }
+        send("UserPromptSubmit"); send("Stop")
+        let pill = try XCTUnwrap(activePills(pet).first)
+        XCTAssertEqual(pill.alphaValue, 1, accuracy: 0.02)
+        // Idle auto-compaction: PreCompact, SubagentStop, SessionStart(compact), no Stop.
+        send("PreCompact"); XCTAssertEqual(pill.alphaValue, 0.55, accuracy: 0.02)
+        send("SubagentStop"); send("SessionStart", "compact")
+        XCTAssertEqual(pill.alphaValue, 1, accuracy: 0.02)
+        // Mid-turn compaction keeps the working turn dim.
+        send("UserPromptSubmit"); send("PreCompact"); send("SessionStart", "compact")
+        XCTAssertEqual(pill.alphaValue, 0.55, accuracy: 0.02)
+    }
 }

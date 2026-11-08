@@ -77,6 +77,10 @@ final class SpeechController {
         var transcriptOffset: UInt64 = 0
         var transcript = TranscriptScan()
         var compacting = false
+        /// Claude's readiness when compaction began. Idle (auto) compaction
+        /// sends PreCompact then SessionStart(compact) and no Stop, so the end
+        /// of compaction puts this back instead of leaving the pill dim.
+        var litBeforeCompact: Bool?
         /// Running Claude Code subagents (agent_id → last event), shown as a
         /// count badge beside the pill instead of pills of their own.
         var subagents: [String: Date] = [:]
@@ -416,6 +420,7 @@ final class SpeechController {
                        threadID: threadID, transcriptPath: transcriptPath ?? "",
                        app: launchApp, kitty: kitty, lit: lit,
                        compacting: event == "PreCompact",
+                       compactEnded: (event == "SessionStart" && sessionSource == "compact") || event == "PostCompact",
                        turnEnded: event == "Stop" || event == "StopFailure" || event == "Interrupt", sessionID: sessionID,
                        sessionStarted: event == "SessionStart", event: event, turnID: turnID,
                        sessionCleared: event == "SessionStart" && sessionSource == "clear", sessionResumed: resuming)
@@ -952,7 +957,7 @@ final class SpeechController {
     /// Create-or-update a session's pill and (optionally) flip its lit state.
     private func updatePill(source: String, label: String, agent: String, root: String,
                             threadID: String, transcriptPath: String, app: String,
-                            kitty: KittyTarget, lit: Bool?, compacting: Bool,
+                            kitty: KittyTarget, lit: Bool?, compacting: Bool, compactEnded: Bool = false,
                             turnEnded: Bool = false, sessionID: String = "", sessionStarted: Bool = false,
                             event: String = "", turnID: String = "", sessionCleared: Bool = false, sessionResumed: Bool = false) {
         let update = { [weak self] in
@@ -1012,7 +1017,12 @@ final class SpeechController {
                 if event == "SessionStart", let confirmed = pill.transcript.codexReady { pill.lit = confirmed }
                 else if let lit { pill.lit = lit }
                 if pill.lit, ["Stop", "Interrupt"].contains(event) { pill.transcript.codexReady = true }
-            } else if let lit { pill.lit = lit }
+            } else {
+                if event == "PreCompact" { pill.litBeforeCompact = pill.lit }
+                else if compactEnded, lit == nil, let prior = pill.litBeforeCompact { pill.lit = prior }
+                if event != "PreCompact" { pill.litBeforeCompact = nil }
+                if let lit { pill.lit = lit }
+            }
             if sessionCleared {
                 pill.neutral = true; pill.lit = true; pill.activeTurnID = ""
                 if agent == "codex", !threadID.isEmpty { pill.observedThreadID = threadID }

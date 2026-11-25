@@ -218,6 +218,15 @@ def claude_weekly_percent(output):
         return int(match[1])
 
 
+def usage_working_directory(roots, projects):
+    for root in roots:
+        path = Path(root)
+        for directory in (path, *path.parents):
+            if projects.get(str(directory), {}).get("hasTrustDialogAccepted") and directory.is_dir():
+                return directory
+    return None
+
+
 def fetch_claude_weekly(state):
     binary = which("claude") or str(Path.home() / ".local/bin/claude")
     # Ask the subscription CLI for its own usage, independent of API-key panes.
@@ -225,11 +234,20 @@ def fetch_claude_weekly(state):
     for key in ("ANTHROPIC_API_KEY", "KITTY_WINDOW_ID", "KITTY_LISTEN_ON"):
         env.pop(key, None)
     try:
+        config_dir = Path(env.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude")
+        config_file = config_dir / ".claude.json"
+        if not config_file.is_file():
+            config_file = Path.home() / ".claude.json"
+        try:
+            projects = json.loads(config_file.read_text()).get("projects", {})
+        except (OSError, ValueError):
+            projects = {}
+        cwd = usage_working_directory(state.get("pane_roots", ()), projects)
         master, slave = pty.openpty()
         try:
             fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 40, 100, 0, 0))
             with subprocess.Popen([binary, "--safe-mode", "--strict-mcp-config", "/usage"],
-                                  stdin=slave, stdout=slave, stderr=slave, env=env,
+                                  stdin=slave, stdout=slave, stderr=slave, env=env, cwd=cwd,
                                   start_new_session=True) as client:
                 try:
                     deadline = monotonic() + 15
@@ -313,6 +331,8 @@ def refresh_usage(timer_id):
             continue
         if resumed or now >= state.get(agent + "_due", 0):
             state[agent + "_due"] = now + interval
+            if agent == "claude":
+                state["pane_roots"] = tuple(w.child.cwd for w in boss.window_id_map.values() if w.child.cwd)
             worker = Thread(target=fetch, args=(state,), daemon=True)
             state[agent + "_worker"] = worker
             worker.start()

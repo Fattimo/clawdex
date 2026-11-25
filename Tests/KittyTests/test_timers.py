@@ -19,7 +19,7 @@ class SidebarTimerTests(unittest.TestCase):
             body=[node for node in tree.body if isinstance(node, ast.FunctionDef)],
             type_ignores=[],
         )
-        self.boss = SimpleNamespace(os_window_map={}, show_error=Mock())
+        self.boss = SimpleNamespace(os_window_map={}, window_id_map={}, show_error=Mock())
         self.process = Mock(returncode=0)
         self.process.poll.return_value = None
         self.process.communicate.return_value = ("", None)
@@ -85,6 +85,14 @@ class SidebarTimerTests(unittest.TestCase):
         self.env["close_agent_panes"](manager, "claude")
         self.boss.confirm.call_args.args[1](True)
         self.boss.mark_window_for_close.assert_called_once_with(tab[0])
+
+    def test_usage_uses_trusted_open_checkout(self):
+        self.env["Path"] = Path
+        checkout = Path(__file__).resolve().parents[2]
+        select = self.env["usage_working_directory"]
+        projects = {str(checkout): {"hasTrustDialogAccepted": True}}
+        self.assertEqual(select([str(checkout / "Tests")], projects), checkout)
+        self.assertIsNone(select([str(checkout.parent)], projects))
 
     def test_claude_usage_matches_only_all_models_week(self):
         parse = self.env["claude_weekly_percent"]

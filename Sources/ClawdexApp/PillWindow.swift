@@ -56,7 +56,8 @@ final class PillWindow: NSPanel {
     }
 
     @discardableResult
-    func setContent(label text: String, lit: Bool, accent: NSColor, fixedWidth: CGFloat? = nil, neutral: Bool = false) -> NSSize {
+    func setContent(label text: String, lit: Bool, accent: NSColor, fixedWidth: CGFloat? = nil, neutral: Bool = false, vacant: Bool = false) -> NSSize {
+        view.vacant = vacant
         view.title = text
         view.lit = lit && !neutral
         view.neutral = neutral
@@ -70,7 +71,7 @@ final class PillWindow: NSPanel {
         let w = PillView.padL + PillView.dotSize + PillView.dotGap + tw + PillView.padR
         let size = NSSize(width: fixedWidth ?? w, height: Self.height)
         view.toolTip = text
-        view.setAccessibilityLabel(text)
+        view.setAccessibilityLabel(vacant ? title : text)
         setContentSize(size)
         view.frame = NSRect(origin: .zero, size: size)
         view.needsDisplay = true
@@ -124,6 +125,7 @@ final class PillView: NSView {
     static let closeSize: CGFloat = 10
     static let font = NSFont.systemFont(ofSize: 12, weight: .medium)
 
+    var vacant = false
     var title = "" { didSet { needsDisplay = true } }
     var lit = false { didSet { needsDisplay = true } }
     var neutral = false { didSet { needsDisplay = true } }
@@ -198,6 +200,15 @@ final class PillView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         let dark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        if vacant {
+            // Keep the row readable without giving an empty seat an agent dot.
+            let text = "–  " + title
+            let attributes: [NSAttributedString.Key: Any] = [.font: Self.font, .foregroundColor: NSColor.secondaryLabelColor]
+            let height = (text as NSString).size(withAttributes: attributes).height
+            (text as NSString).draw(in: NSRect(x: Self.padL, y: bounds.midY - height / 2,
+                width: max(0, bounds.width - Self.padL), height: height), withAttributes: attributes)
+            return
+        }
         let r = bounds.insetBy(dx: 0.5, dy: 0.5)
         let radius = r.height / 2
         let path = NSBezierPath(roundedRect: r, xRadius: radius, yRadius: radius)

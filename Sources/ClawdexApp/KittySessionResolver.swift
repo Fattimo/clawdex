@@ -9,6 +9,7 @@ enum KittySessionResolver {
         var processID: Int
         var agent: String
         var root: String
+        var tabTitle = ""
         var emptyPromptObservedAt: Date? = nil
         var resumeThreadID: String = ""
         var resumeTranscriptPath: String = ""
@@ -52,6 +53,7 @@ enum KittySessionResolver {
                 // session after where it was launched, matching its hooks.
                 let home = agent == "claude" ? (launchDirectory(pid) ?? cwd) : cwd
                 var client = Client(window: String(id), processID: pid, agent: agent, root: projectRoot(home))
+                client.tabTitle = window["tabTitle"] as? String ?? ""
                 if agent == "codex", let resume = command.firstIndex(of: "resume"), resume + 1 < command.count,
                    UUID(uuidString: command[resume + 1]) != nil {
                     client.resumeThreadID = command[resume + 1].lowercased()
@@ -189,7 +191,13 @@ enum KittySessionResolver {
     private static func windows(in data: Data) -> [[String: Any]]? {
         guard let osWindows = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { return nil }
         return osWindows.flatMap { $0["tabs"] as? [[String: Any]] ?? [] }
-            .flatMap { $0["windows"] as? [[String: Any]] ?? [] }
+            .flatMap { tab in
+                (tab["windows"] as? [[String: Any]] ?? []).map { window in
+                    var item = window
+                    item["tabTitle"] = tab["title"]
+                    return item
+                }
+            }
     }
 
     private static func canonical(_ path: String) -> String {

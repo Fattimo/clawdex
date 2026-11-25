@@ -68,6 +68,7 @@ final class SpeechController {
         var observedSessionID = ""
         var observedSessionEpoch = 0
         var activeTurnID = ""
+        var workspaceTab = ""
         var observedClientID: String?
         var observedProcessID: Int?
         var observedThreadID = ""
@@ -108,6 +109,7 @@ final class SpeechController {
         var codexTurnID = ""
         var codexHasLifecycle = false
     }
+    private var vacantSlots: [Int: PillWindow] = [:]
     private var pillOrder: [String] = []        // oldest → newest, alternating sides
     private var pills: [String: Pill] = [:]
     private var knownCodexTranscripts: [String: String] = [:]
@@ -294,6 +296,9 @@ final class SpeechController {
                     pill.size = pill.window.setContent(label: pill.label, lit: pill.lit, accent: color(for: source))
                 }
             }
+            let workspaceTab = Self.stripMarker(client.tabTitle)
+            let workspaceChanged = pill.workspaceTab != workspaceTab
+            pill.workspaceTab = workspaceTab
             let changed = pill.kitty != target || pill.observedClientID != id || pill.root != client.root
             pill.observedClientID = id; pill.observedProcessID = client.processID
             pill.observedSessionID = pill.sessionID; pill.observedSessionEpoch = pill.sessionEpoch
@@ -302,6 +307,7 @@ final class SpeechController {
                newlyRegistered || pill.lastSeen <= observedAt {
                 neutralizeCodexClient(source: source)
             }
+            if workspaceChanged || changed { relayoutPills() }
             if changed { pill.paintedLit = nil }
             if changed || pill.paintedLit != pill.lit { paintKittyTab(pill, source: source) }
         }
@@ -313,6 +319,7 @@ final class SpeechController {
         // Keep the switchboard glued to the pet (and on the correct side) as it
         // is dragged around the screen.
         pet.onMoved = { [weak self] in self?.relayoutPills(); self?.relayout() }
+        relayoutPills()
         // Sweep out sessions that have gone quiet.
         Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
             self?.prunePills()
@@ -330,6 +337,7 @@ final class SpeechController {
 
     func updateConfig(_ config: ClawdexConfig) {
         self.config = config
+        relayoutPills()
         if !config.showSwitchboard {
             removeAllPills()
         }
@@ -728,9 +736,13 @@ final class SpeechController {
             let target = Self.resolveKitty(reported, root: root, agent: agent, clientPID: clientPID)
             var success = false
             if let target, let sock = Self.kittyTarget(target) {
+                let marker = neutral ? Self.neutralMarker : (halfDot?.marker ?? (lit ? Self.readyMarker : Self.workingMarker))
+                let paneStatus = [agent, marker, lit && !neutral ? "ready" : "dim", Self.hex(accent)].joined(separator: ":")
+                let paneUpdated = Self.execKitten(sock, ["set-user-vars", "--match", "id:" + target.window,
+                                                         "clawdex_status=" + paneStatus]) != nil
                 let colored = Self.execKitten(sock, ["set-tab-color", "--match", "window_id:" + target.window] + colors) != nil
-                let titled = Self.markKittyTabOnQueue(target, marker: neutral ? Self.neutralMarker : (halfDot?.marker ?? (lit ? Self.readyMarker : Self.workingMarker)))
-                success = colored && titled
+                let titled = Self.markKittyTabOnQueue(target, marker: marker)
+                success = paneUpdated && colored && titled
             }
             let painted = success
             DispatchQueue.main.async { [weak self] in
@@ -794,6 +806,7 @@ final class SpeechController {
     private static func clearKittyTab(_ k: KittyTarget) {
         kittyQueue.async {
             guard let sock = kittyTarget(k) else { return }
+            _ = execKitten(sock, ["set-user-vars", "--match", "id:" + k.window, "clawdex_status"])
             _ = execKitten(sock, ["set-tab-color", "--match", "window_id:" + k.window,
                                   "active_bg=NONE", "active_fg=NONE",
                                   "inactive_bg=NONE", "inactive_fg=NONE"])
@@ -1364,18 +1377,62 @@ final class SpeechController {
     private func relayoutPills() {
         guard let pet = pet else { return }
         let badgeSpace = pills.values.contains { $0.badgeContent != nil } ? badgeGap + SubagentBadgeWindow.size : 0
-        pet.companionSideInset = pillOrder.isEmpty ? 0 : CompanionLayout.sideInset(pet.frame) + badgeSpace
-        let codexCount = pillOrder.filter { Self.agent(ofKey: $0) == "codex" }.count
-        let rows = max(codexCount, pillOrder.count - codexCount)
+        let pins = config.showSwitchboard ? config.pinnedWorkspaces : []
+        var placements: [String: Int] = [:]
+        var occupied = Set<Int>()
+        // Pinned rows represent Kitty tabs. A hook from another terminal or
+        // desktop session may report the same checkout without owning a pane.
+        for source in pillOrder {
+            guard let pill = pills[source], pill.observedClientID != nil,
+                  let index = pins.firstIndex(of: pill.workspaceTab) else { continue }
+            let slot = 2 * index + (pill.agent == "codex" ? 1 : 0)
+            if occupied.insert(slot).inserted { placements[source] = slot }
+        }
+        let extras = pillOrder.filter { placements[$0] == nil }
+        let rightExtras = extras.filter { pills[$0]?.agent == "codex" }.count
+        let extraRows = max(rightExtras, extras.count - rightExtras)
+        let rows = pins.count + extraRows
+        pet.companionSideInset = rows == 0 ? 0 : CompanionLayout.sideInset(pet.frame) + badgeSpace
         pet.companionSessionInset = max(0, 10 + CGFloat(rows) * (PillWindow.height + CompanionLayout.rowGap) - CompanionLayout.rowGap - pet.frame.height)
         pet.constrainCompanionToScreen()
+
+        let vacant = Set(0..<(2 * pins.count)).subtracting(occupied)
+        for slot in Set(vacantSlots.keys).subtracting(vacant) {
+            if let window = vacantSlots.removeValue(forKey: slot) {
+                pet.removeChildWindow(window)
+                window.orderOut(nil)
+            }
+        }
+        for slot in vacant {
+            let frame = CompanionLayout.sessionFrame(index: rows - 1 - slot / 2, pet: pet.frame, onLeft: slot.isMultiple(of: 2))
+            let window = vacantSlots[slot] ?? PillWindow()
+            window.title = "\(pins[slot / 2]) · \(slot.isMultiple(of: 2) ? "Claude" : "Codex") · No session"
+            window.setContent(label: pins[slot / 2], lit: false, accent: .clear, fixedWidth: frame.width, vacant: true)
+            window.setFrameOrigin(frame.origin)
+            if vacantSlots[slot] == nil {
+                window.ignoresMouseEvents = true
+                vacantSlots[slot] = window
+                pet.addChildWindow(window, ordered: .above)
+                window.fadeIn()
+            }
+        }
         var sideRows: [Bool: Int] = [:]
         for source in pillOrder {
             guard let pill = pills[source] else { continue }
             let left = pill.agent != "codex"
-            let row = sideRows[left, default: 0]; sideRows[left] = row + 1
+            let row: Int
+            let label: String
+            if let slot = placements[source] {
+                row = rows - 1 - slot / 2
+                label = pins[slot / 2]
+            } else {
+                row = sideRows[left, default: 0]
+                sideRows[left] = row + 1
+                label = pill.label
+            }
             let frame = CompanionLayout.sessionFrame(index: row, pet: pet.frame, onLeft: left)
-            pill.size = pill.window.setContent(label: pill.label, lit: pill.lit,
+            pill.window.title = "\(label) · \(left ? "Claude" : "Codex")"
+            pill.size = pill.window.setContent(label: label, lit: pill.lit,
                 accent: color(for: source), fixedWidth: frame.width, neutral: pill.neutral)
             pill.window.setFrameOrigin(frame.origin)
             // Subagent badge on the pill's outward side, away from the pet.

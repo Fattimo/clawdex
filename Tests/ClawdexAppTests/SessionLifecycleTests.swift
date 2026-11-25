@@ -9,6 +9,42 @@ final class SessionLifecycleTests: XCTestCase {
         (pet.childWindows ?? []).compactMap { $0 as? PillWindow }.filter { $0.isVisible && $0.alphaValue > 0.01 }
     }
 
+    func testPinnedRowsPairByKittyTabAndRemainWhenClientsExit() throws {
+        let pet = PetWindow()
+        var config = ClawdexConfig(messageVisibility: .none)
+        config.pinnedWorkspaces = ["app", "appcopy", "app3", "appcodex"]
+        let speech = SpeechController(pet: pet, config: config)
+        settle()
+        XCTAssertEqual(activePills(pet).count, 8)
+        XCTAssertTrue(activePills(pet).allSatisfy(\.ignoresMouseEvents))
+        let clients = [
+            KittySessionResolver.Client(window: "12", processID: 102, agent: "codex", root: "/tmp/feature", tabTitle: "○ appcopy"),
+            KittySessionResolver.Client(window: "11", processID: 101, agent: "claude", root: "/tmp/kitty-appcopy", tabTitle: "● appcopy")
+        ]
+        speech.reconcileKittySessions([clients[1]], socket: socket)
+        settle()
+        let left = try XCTUnwrap(activePills(pet).first { $0.title == "appcopy · Claude" })
+        let right = try XCTUnwrap(activePills(pet).first { $0.title == "appcopy · Codex · No session" })
+        XCTAssertLessThan(left.frame.midX, right.frame.midX)
+        XCTAssertEqual(left.frame.midY, right.frame.midY)
+        XCTAssertFalse(try XCTUnwrap(left.contentView as? PillView).vacant)
+        XCTAssertTrue(try XCTUnwrap(right.contentView as? PillView).vacant)
+        speech.reconcileKittySessions(clients, socket: socket)
+        settle()
+        let rows = Dictionary(grouping: activePills(pet), by: { $0.frame.minY }).sorted { $0.key > $1.key }
+        XCTAssertEqual(rows.map { $0.value.first?.contentView?.toolTip }, config.pinnedWorkspaces)
+        XCTAssertTrue(rows.allSatisfy { $0.value.count == 2 })
+        XCTAssertTrue(rows[1].value.allSatisfy { !$0.ignoresMouseEvents })
+        speech.reconcileKittySessions([], socket: socket)
+        settle()
+        XCTAssertEqual(activePills(pet).count, 8)
+        XCTAssertTrue(activePills(pet).allSatisfy(\.ignoresMouseEvents))
+        config.showSwitchboard = false
+        speech.updateConfig(config)
+        settle()
+        XCTAssertTrue(activePills(pet).isEmpty)
+    }
+
     func testClientRegistersBeforeHooksAndPresenceDoesNotResetBusyState() throws {
         let pet = PetWindow()
         let speech = SpeechController(pet: pet, config: ClawdexConfig(messageVisibility: .none))
@@ -195,7 +231,8 @@ final class SessionLifecycleTests: XCTestCase {
             XCTAssertTrue(view.lit)
             send("SessionStart", source: "clear"); settle()
             XCTAssertTrue(view.neutral); XCTAssertFalse(view.lit)
-            XCTAssertEqual(pill.alphaValue, 0.85, accuracy: 0.02)
+            XCTAssertEqual(pill.alphaValue, 1, accuracy: 0.02)
+            XCTAssertEqual(view.bodyAlpha, 0.85, accuracy: 0.02)
             send("Stop"); settle()
             XCTAssertTrue(view.neutral)
             send("UserPromptSubmit"); settle()

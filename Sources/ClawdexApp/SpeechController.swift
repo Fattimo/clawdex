@@ -171,12 +171,24 @@ final class SpeechController {
         return identity + keySep + agent
     }
 
-    private func sessionSource(repo: String, root: String, agent: String, sessionID: String = "", transcript: String = "") -> String {
+    private func sessionSource(repo: String, root: String, agent: String, sessionID: String = "", transcript: String = "", kitty: KittyTarget = KittyTarget()) -> String {
         let candidates = pillOrder.filter { pills[$0]?.agent == agent }
         if let match = candidates.first(where: { source in
             guard let pill = pills[source] else { return false }
             return (!sessionID.isEmpty && pill.sessionID == sessionID) || (!transcript.isEmpty && pill.transcriptPath == transcript)
         }) { return match }
+        // Claude's hooks follow its cwd into worktrees, while discovery uses its
+        // launch directory. Both refer to the same Kitty pane. Codex's shared
+        // server can report another client's pane, so it keeps its own resolver.
+        if agent == "claude", !kitty.isEmpty {
+            let socket = Self.kittySocket(kitty)
+            let matches = candidates.filter { source in
+                guard let target = pills[source]?.kitty, target.window == kitty.window else { return false }
+                return (!kitty.sock.isEmpty && target.sock == kitty.sock)
+                    || (socket != nil && Self.kittySocket(target) == socket)
+            }
+            if matches.count == 1 { return matches[0] }
+        }
         let canonical = root.hasPrefix("/") ? URL(fileURLWithPath: root).standardizedFileURL.resolvingSymlinksInPath().path : root
         if let match = candidates.first(where: { pills[$0]?.root == canonical }) { return match }
         if let common = KittySessionResolver.repositoryIdentity(root) {
@@ -203,6 +215,7 @@ final class SpeechController {
         guard config.showSwitchboard, !kittyDiscoveryInFlight, Self.kittenURL != nil else { return }
         kittyDiscoveryInFlight = true
         let generation = kittyDiscoveryGeneration
+        let observedClients = Set(pills.values.compactMap(\.observedClientID))
         let knownTranscripts = knownCodexTranscripts
         let known = Set(pills.values.compactMap { Self.kittySocket($0.kitty) })
         Self.kittyQueue.async { [weak self] in
@@ -217,6 +230,12 @@ final class SpeechController {
             let sockets = Array((known.sorted() + discovered.sorted()).reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }.prefix(4))
             let snapshots = sockets.compactMap { socket -> (String, [KittySessionResolver.Client])? in
                 guard let data = Self.execKitten(socket, ["ls"]), var clients = KittySessionResolver.clients(in: data) else { return nil }
+                for index in clients.indices.prefix(32) where clients[index].agent == "claude"
+                    && !observedClients.contains(socket + "#" + clients[index].identity) {
+                    if let screen = Self.execKitten(socket, ["get-text", "--match", "id:" + clients[index].window]) {
+                        clients[index].claudeWorking = KittySessionResolver.hasClaudeInterruptFooter(screen)
+                    }
+                }
                 for index in clients.indices.prefix(32) where clients[index].agent == "codex" {
                     let thread = clients[index].resumeThreadID
                     if !thread.isEmpty {
@@ -250,7 +269,7 @@ final class SpeechController {
         guard config.showSwitchboard else { return }
         let prefix = socket + "#"
         let present = Set(clients.map { prefix + $0.identity })
-        let grouped = Dictionary(grouping: clients) { sessionSource(repo: "", root: $0.root, agent: $0.agent) }
+        let grouped = Dictionary(grouping: clients) { sessionSource(repo: "", root: $0.root, agent: $0.agent, kitty: KittyTarget(window: $0.window, sock: socket)) }
         dismissedKittyClients = dismissedKittyClients.filter { !$0.hasPrefix(prefix) || present.contains($0) }
         for source in pillOrder {
             guard let pill = pills[source] else { continue }
@@ -279,7 +298,7 @@ final class SpeechController {
             if newlyRegistered {
                 updatePill(source: source, label: Self.displayLabel(repo: (client.root as NSString).lastPathComponent, agent: client.agent),
                     agent: client.agent, root: client.root, threadID: "", transcriptPath: "", app: Self.kittyBundleID,
-                    kitty: target, lit: true, compacting: false)
+                    kitty: target, lit: !client.claudeWorking, compacting: false)
             }
             guard let pill = pills[source] else { continue }
             let bindThread = !client.resumeThreadID.isEmpty && (pill.observedThreadID.isEmpty
@@ -370,7 +389,7 @@ final class SpeechController {
         // color instead of clobbering one shared entry. `label` is what the user
         // sees — it marks non-Claude agents (e.g. "pylon ·cdx").
         let src = repo.isEmpty ? "" : self.sessionSource(repo: repo, root: root ?? "", agent: agentTag,
-            sessionID: sessionID, transcript: transcriptPath ?? "")
+            sessionID: sessionID, transcript: transcriptPath ?? "", kitty: kitty)
         let threadID = Self.threadID(fromTranscript: transcriptPath ?? "")
         let resuming = agentTag == "codex" && event == "SessionStart" && sessionSource == "resume"
             && UUID(uuidString: sessionID) != nil

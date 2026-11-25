@@ -10,10 +10,17 @@ enum KittySessionResolver {
         var agent: String
         var root: String
         var tabTitle = ""
+        var claudeWorking = false
         var emptyPromptObservedAt: Date? = nil
         var resumeThreadID: String = ""
         var resumeTranscriptPath: String = ""
         var identity: String { window + ":" + String(processID) }
+    }
+
+    static func hasClaudeInterruptFooter(_ data: Data) -> Bool {
+        guard let text = String(data: data, encoding: .utf8),
+              let footer = text.split(whereSeparator: \.isNewline).last(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) else { return false }
+        return footer.components(separatedBy: "·").contains { $0.trimmingCharacters(in: .whitespaces) == "esc to interrupt" }
     }
 
     /// Codex can clear its TUI without emitting a lifecycle hook. Recognize

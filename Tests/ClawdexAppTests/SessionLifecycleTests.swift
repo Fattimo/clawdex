@@ -9,6 +9,34 @@ final class SessionLifecycleTests: XCTestCase {
         (pet.childWindows ?? []).compactMap { $0 as? PillWindow }.filter { $0.isVisible && $0.alphaValue > 0.01 }
     }
 
+    func testClaudeWorktreeHooksAndDiscoverySharePinnedPane() throws {
+        for hookFirst in [false, true] {
+            let pet = PetWindow()
+            var config = ClawdexConfig(messageVisibility: .none)
+            config.pinnedWorkspaces = ["appcopy"]
+            let speech = SpeechController(pet: pet, config: config)
+            let client = KittySessionResolver.Client(window: "10", processID: 101, agent: "claude", root: "/tmp/appcopy", tabTitle: "appcopy", claudeWorking: true)
+            func hook(_ event: String) {
+                speech.handle(event: event, narration: nil, transcriptPath: nil, source: "kitty-appcopy", root: "/tmp/kitty-appcopy", agent: "claude",
+                    kitty: .init(window: "10", sock: socket), sessionID: "worktree-session")
+            }
+            if hookFirst { hook("UserPromptSubmit") }
+            speech.reconcileKittySessions([client], socket: socket)
+            settle()
+            let pinned = try XCTUnwrap(activePills(pet).first { $0.title == "appcopy · Claude" })
+            let view = try XCTUnwrap(pinned.contentView as? PillView)
+            XCTAssertFalse(view.lit)
+            hook("PreToolUse")
+            speech.reconcileKittySessions([client], socket: socket)
+            settle()
+            XCTAssertEqual(activePills(pet).count, 2) // Claude and the vacant Codex slot.
+            XCTAssertFalse(view.lit)
+            hook("Stop")
+            settle()
+            XCTAssertTrue(view.lit)
+        }
+    }
+
     func testPinnedRowsPairByKittyTabAndRemainWhenClientsExit() throws {
         let pet = PetWindow()
         var config = ClawdexConfig(messageVisibility: .none)

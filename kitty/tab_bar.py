@@ -12,6 +12,8 @@ from kitty.fast_data_types import (
     GLFW_PRESS,
     GLFW_RELEASE,
     get_boss,
+    get_tab_being_dragged,
+    set_tab_being_dragged,
 )
 from kitty.tab_bar import draw_tab_with_powerline, truncate_line, TabBar, CellRange
 from kitty.fast_data_types import wcswidth
@@ -332,6 +334,8 @@ def icon_at(manager, x, y):
 
 
 def handle_tab_bar_mouse(manager, x, y, button, modifiers, action):
+    if button == GLFW_MOUSE_BUTTON_LEFT and action == GLFW_PRESS:
+        manager._pane_cycle_tab = None
     pending = getattr(manager, "_sidebar_control_pressed", None)
     if pending is not None:
         if button == GLFW_MOUSE_BUTTON_LEFT and action == GLFW_RELEASE:
@@ -352,11 +356,28 @@ def handle_tab_bar_mouse(manager, x, y, button, modifiers, action):
                     get_boss().close_tab(tab)
         return
     if button == GLFW_MOUSE_BUTTON_LEFT and action == GLFW_PRESS and not modifiers:
-        tab_id = icon_at(manager, x, y)
-        if tab_id is not None:
-            manager._sidebar_control_pressed = tab_id
+        control = icon_at(manager, x, y)
+        if control is not None:
+            manager._sidebar_control_pressed = control
             manager.recent_tab_bar_mouse_events.clear()
             return
+        tab = manager.active_tab
+        if (manager.tab_bar.is_vertical and tab is not None and tab.windows.num_groups == 2
+                and manager.tab_bar.tab_id_at(int(x), int(y)) == tab.id):
+            manager._pane_cycle_tab = tab.id
+    elif button == GLFW_MOUSE_BUTTON_LEFT and action == GLFW_RELEASE:
+        pressed_tab = getattr(manager, "_pane_cycle_tab", None)
+        manager._pane_cycle_tab = None
+        if pressed_tab is not None and not modifiers:
+            tab = manager.active_tab
+            dragged_tab, dragging, _, _ = get_tab_being_dragged()
+            if (not dragging and dragged_tab == pressed_tab and tab is not None and tab.id == pressed_tab
+                    and tab.windows.num_groups == 2 and manager.tab_bar.tab_id_at(int(x), int(y)) == pressed_tab
+                    and icon_at(manager, x, y) is None):
+                set_tab_being_dragged()
+                manager.recent_tab_bar_mouse_events.clear()
+                tab.next_window()
+                return
     return manager._agent_swap_original_mouse(x, y, button, modifiers, action)
 
 

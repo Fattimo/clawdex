@@ -76,6 +76,22 @@ For kitty, enable `allow_remote_control socket-only` and `listen_on unix:${TMPDI
 
 The author's kitty setup (vertical tab bar that reads these markers, shaders) is versioned in `kitty/`. Run `kitty/sync.sh` to diff it against `~/.config/kitty`, `kitty/sync.sh push` to install it, or `kitty/sync.sh pull` to bring live edits back. Restart kitty after changing `tab_bar.py`.
 
+The included Kitty startup session opens Claude on the left and Codex on the
+right in each app tab. The focused pane takes about 80% of the width. The two
+sidebar dots follow the same order. To keep those rows visible in the Clawdex
+switchboard, set `"pinnedWorkspaces": ["app", "appcopy", "app3", "appcodex"]`
+in `~/.clawdex/config.json`.
+
+The sidebar footer has a Mac shutdown timer above Stay awake. Click its label or
+`+` to schedule shutdown in 15 minutes; each additional `+` adds 15 minutes.
+`■` cancels it with `killall shutdown`. Scheduling, extending, and canceling use
+the macOS administrator prompt. This uses system shutdown, which closes Kitty
+without its quit confirmation and can discard unsaved work in apps. The shutdown
+survives Kitty exiting; its sidebar countdown is only tracked for the current
+Kitty instance. After restarting Kitty, cancel an existing schedule from Terminal
+with `sudo /usr/bin/killall shutdown` before setting a new one. Setting a new timer
+also replaces any existing system shutdown schedule.
+
 ## Install
 
 One command, source-from-clone:

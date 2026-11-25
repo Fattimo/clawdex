@@ -1,0 +1,38 @@
+os_window_title claude
+
+# Tab colors are painted live by clawdex from its switchboard: the pill's
+# accent when Claude is ready for you, dimmed while it's working.
+
+new_tab app
+cd ~/Projects/app
+layout horizontal
+launch --watcher focus_width.py --title Claude zsh -lic "if [[ -f ../kitty-app/.git ]]; then cd ../kitty-app && claude --continue; else claude --worktree kitty-app; fi; exec zsh"
+launch --watcher focus_width.py --title Codex zsh -lic "codex resume --last; exec zsh"
+
+new_tab appcopy
+cd ~/Projects/appcopy
+layout horizontal
+launch --watcher focus_width.py --title Claude zsh -lic "if [[ -f ../kitty-appcopy/.git ]]; then cd ../kitty-appcopy && claude --continue; else claude --worktree kitty-appcopy; fi; exec zsh"
+launch --watcher focus_width.py --title Codex zsh -lic "codex resume --last; exec zsh"
+
+new_tab app3
+cd ~/Projects/app3
+layout horizontal
+launch --watcher focus_width.py --title Claude zsh -lic "if [[ -f ../kitty-app3/.git ]]; then cd ../kitty-app3 && claude --continue; else claude --worktree kitty-app3; fi; exec zsh"
+launch --watcher focus_width.py --title Codex zsh -lic "codex resume --last; exec zsh"
+
+new_tab appcodex
+cd ~/Projects/appcodex
+layout horizontal
+launch --watcher focus_width.py --title Claude zsh -lic "if [[ -f ../kitty-appcodex/.git ]]; then cd ../kitty-appcodex && claude --continue; else claude --worktree kitty-appcodex; fi; exec zsh"
+launch --watcher focus_width.py --title Codex zsh -lic "codex resume --last; exec zsh"
+
+new_tab clawdex
+cd ~/Projects/clawdex
+launch zsh -i
+
+new_tab projects
+cd ~/Projects
+launch zsh -i
+
+focus_tab 0

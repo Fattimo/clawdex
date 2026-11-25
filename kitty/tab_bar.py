@@ -1,9 +1,7 @@
-"""Claude/Codex tab switch with sidebar and horizontal rendering for kitty 0.49."""
+"""Custom Kitty sidebar with session status and timer controls."""
 
-import os
-import shlex
-import shutil
 import math
+import json
 import subprocess
 from time import monotonic
 
@@ -20,97 +18,32 @@ from kitty.fast_data_types import wcswidth
 from kitty.tabs import TabManager
 
 
-def process_agent(process):
-    args = process.get("cmdline") or []
-    if not args:
+def paired_status(tab):
+    if tab is None or len(tab) < 2:
         return None
-    executable = os.path.basename(args[0])
-    candidates = args[1:2] if executable in ("node", "bun") else args[:1]
-    for arg in candidates:
-        name = os.path.basename(arg)
-        if name in ("claude", "codex", "claude.js", "codex.js"):
-            return name.removesuffix(".js")
-    return None
-
-
-def running_agent(window):
-    agents = {process_agent(process) for process in window.child.foreground_processes}
-    agents.discard(None)
-    return next(iter(agents)) if len(agents) == 1 else None
-
-
-def switchable_window(tab):
-    windows = list(tab)
-    if len(windows) != 1:
-        return None
-    window = windows[0]
-    return window if running_agent(window) else None
-
-
-def project_root(cwd):
-    directory = os.path.abspath(cwd)
-    while True:
-        # A linked Git worktree has a .git file instead of a directory.
-        if os.path.exists(os.path.join(directory, ".git")):
-            return directory
-        parent = os.path.dirname(directory)
-        if parent == directory:
-            return cwd
-        directory = parent
-
-
-def agent_project_root(tab, window):
-    pinned = getattr(tab, "_agent_swap_project_root", None)
-    if pinned and os.path.isdir(pinned):
-        return pinned
-    roots = {
-        project_root(process["cwd"])
-        for process in window.child.foreground_processes
-        if process_agent(process) and process.get("cwd") and os.path.isdir(process["cwd"])
-    }
-    return next(iter(roots)) if len(roots) == 1 else None
-
-
-def swap_agent(tab):
-    last_swap = getattr(tab, "_agent_swap_last_started", 0)
-    if monotonic() - last_swap < 1:
-        return
-    window = switchable_window(tab)
-    if window is None:
-        return
-    boss = get_boss()
-    agent = "codex" if running_agent(window) == "claude" else "claude"
-    search_path = os.pathsep.join((os.path.expanduser("~/.local/bin"), "/opt/homebrew/bin", os.environ.get("PATH", "")))
-    executable = shutil.which(agent, path=search_path)
-    if executable is None:
-        boss.show_error("Cannot switch agent", f"{agent} is not installed on your PATH.")
-        return
-    cwd = agent_project_root(tab, window)
-    if cwd is None:
-        boss.show_error("Cannot switch agent", "Could not identify a single project directory for this CLI.")
-        return
-    arguments = [executable, "resume", "--last"] if agent == "codex" else [executable, "--continue"]
-    direnv = shutil.which("direnv", path=search_path)
-    if direnv and os.path.isfile(os.path.join(cwd, ".envrc")):
-        arguments = [direnv, "exec", ".", *arguments]
-    command = shlex.join(arguments) + "; exec /bin/zsh -i"
-    try:
-        replacement = tab.new_window(use_shell=False, cmd=["/bin/zsh", "-ic", command], cwd=cwd, copy_colors_from=window, hold=True)
-    except Exception as error:
-        boss.show_error("Cannot switch agent", str(error))
-        return
-    if replacement is None:
-        return
-    tab._agent_swap_project_root = cwd
-    tab._agent_swap_last_started = monotonic()
-    tab.set_active_window(replacement)
-    boss.mark_window_for_close(window)
+    dots = {}
+    for window in tab:
+        fields = window.user_vars.get("clawdex_status", "").split(":")
+        if len(fields) != 4:
+            continue
+        agent, marker, state, color = fields
+        if (agent not in ("claude", "codex") or marker not in ("●", "○", "◉", "◐", "◑")
+                or state not in ("ready", "dim") or len(color) != 7 or color[0] != "#"
+                or any(c not in "0123456789abcdefABCDEF" for c in color[1:])):
+            continue
+        # Codex can already be mid-turn when Clawdex starts observing it.
+        # Its live child title keeps spinning even with a fixed Kitty pane title.
+        title = window.child_title or ""
+        if agent == "codex" and len(title) >= 2 and title[0] in "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏" and title[1] == " ":
+            marker, state = "○", "dim"
+        dots[agent] = marker, state == "ready", int(color[1:], 16)
+    if dots:
+        missing = ("·", False, 0x667386)
+        return [dots.get(agent, missing) for agent in ("claude", "codex")]
 
 
 def draw_tab(draw_data, screen, tab, before, max_tab_length, index, is_last, extra_data):
     manager = get_boss().os_window_map.get(tab.os_window_id)
-    actual_tab = manager.tab_for_id(tab.tab_id) if manager is not None else None
-    window = switchable_window(actual_tab) if actual_tab is not None else None
     if draw_data.tab_bar_edge in ("left", "right"):
         row = screen.cursor.y
         width = screen.columns
@@ -131,6 +64,12 @@ def draw_tab(draw_data, screen, tab, before, max_tab_length, index, is_last, ext
                               + ((second >> shift) & 255) * amount)
                         for shift in (16, 8, 0)]
             return (channels[0] << 16) | (channels[1] << 8) | channels[2]
+        dots = paired_status(manager.tab_for_id(tab.tab_id) if manager else None) if width >= 8 else None
+        if dots:
+            ready_colors = [color for _, lit, color in dots if lit]
+            ready = bool(ready_colors)
+            if ready:
+                accent = blend(ready_colors[0], ready_colors[-1], 0.5)
         background = 0x222936 if tab.is_active else 0x101318
         if ready:
             background = blend(0x101318, accent, 0.62 if tab.is_active else 0.46)
@@ -150,11 +89,17 @@ def draw_tab(draw_data, screen, tab, before, max_tab_length, index, is_last, ext
                 screen.cursor.fg = text_color
         screen.cursor.x, screen.cursor.y = 0, center
         close_column = width - 2
-        column = width - 4
         show_close = width >= 6
-        show_switch = window is not None and width >= 9
-        title_width = max(0, (column - 1 if show_switch else close_column - 1) - 3)
-        if marker and width >= 6:
+        title_column = 5 if dots else 3
+        title_width = max(0, close_column - title_column - 1)
+        if dots:
+            for index, (symbol, lit, color) in enumerate(dots):
+                screen.cursor.x = 1 + 2 * index
+                dot = blend(color, 0xFFFFFF, 0.28) if lit else color
+                screen.cursor.fg = (dot << 8) | 2
+                screen.draw(symbol)
+            screen.cursor.fg = text_color
+        elif marker and width >= 6:
             screen.cursor.x = 1
             dot = blend(accent, 0xFFFFFF, 0.28) if ready else 0x667386
             if marker in ("◐", "◑") and not ready:
@@ -168,12 +113,9 @@ def draw_tab(draw_data, screen, tab, before, max_tab_length, index, is_last, ext
         if title_width:
             if wcswidth(title) > title_width:
                 title = truncate_line(title, title_width)
-            screen.cursor.x = 3
+            screen.cursor.x = title_column
             screen.draw(title)
         if not extra_data.for_layout and manager is not None:
-            hitboxes = getattr(manager, "_agent_swap_hitboxes", {})
-            manager._agent_swap_hitboxes = hitboxes
-            hitboxes.pop(tab.tab_id, None)
             close_hitboxes = getattr(manager, "_agent_close_hitboxes", {})
             manager._agent_close_hitboxes = close_hitboxes
             close_hitboxes.pop(tab.tab_id, None)
@@ -183,33 +125,10 @@ def draw_tab(draw_data, screen, tab, before, max_tab_length, index, is_last, ext
                 screen.cursor.fg = (0x8797AE << 8) | 2
                 screen.draw("×")
                 close_hitboxes[tab.tab_id] = (close_column, center)
-            if show_switch:
-                screen.cursor.x = column
-                screen.cursor.bold = False
-                screen.cursor.fg = (0xC6CDD8 << 8) | 2
-                screen.draw("⇄")
-                hitboxes[tab.tab_id] = (column, center)
         # kitty uses the final cursor row to measure the tab's clickable extent.
         screen.cursor.x, screen.cursor.y = max(0, width - 1), row + height - 1
         return screen.cursor.x
-    foreground, background = screen.cursor.fg, screen.cursor.bg
-    end = draw_tab_with_powerline(draw_data, screen, tab, before, max_tab_length, index, is_last, extra_data)
-    if not extra_data.for_layout:
-        if manager is not None:
-            hitboxes = getattr(manager, "_agent_swap_hitboxes", {})
-            manager._agent_swap_hitboxes = hitboxes
-            hitboxes.pop(tab.tab_id, None)
-            # The title template reserves three trailing spaces before the separator.
-            column = end - 3
-            if window is not None and column > before + 3:
-                cursor_x, cursor_fg, cursor_bg = screen.cursor.x, screen.cursor.fg, screen.cursor.bg
-                screen.cursor.x = column
-                screen.cursor.fg, screen.cursor.bg = foreground, background
-                screen.draw("⇄")
-                screen.cursor.x, screen.cursor.fg, screen.cursor.bg = cursor_x, cursor_fg, cursor_bg
-                hitboxes[tab.tab_id] = (column, screen.cursor.y)
-    return end
-
+    return draw_tab_with_powerline(draw_data, screen, tab, before, max_tab_length, index, is_last, extra_data)
 
 
 def caffeine_state():
@@ -277,16 +196,69 @@ def stop_caffeine():
     repaint_caffeine()
 
 
-def draw_caffeine_footer(bar, first_unused):
-    bar._clawdex_caffeine_controls = []
+def shutdown_state():
+    boss = get_boss()
+    state = getattr(boss, "_clawdex_shutdown", None)
+    if state is None:
+        state = {"deadline": 0, "timer": None, "pending": None}
+        boss._clawdex_shutdown = state
+    return state
+
+
+def refresh_shutdown(timer_id):
+    state = shutdown_state()
+    pending = state["pending"]
+    if pending is not None:
+        process, minutes = pending
+        if process.poll() is not None:
+            output, _ = process.communicate()
+            state["pending"] = None
+            if process.returncode == 0:
+                state["deadline"] = monotonic() + minutes * 60 if minutes else 0
+            elif "(-128)" not in output:
+                # Authentication cancellation leaves the previous schedule intact.
+                # Other failures may occur after the previous timer was canceled.
+                state["deadline"] = 0
+                get_boss().show_error("Cannot change Mac shutdown", output.strip())
+    if state["pending"] is None and state["deadline"] <= monotonic():
+        state["deadline"] = 0
+        if state["timer"] is not None:
+            remove_timer(state["timer"])
+            state["timer"] = None
+    repaint_caffeine()
+
+
+def change_shutdown(cancel=False):
+    state = shutdown_state()
+    if state["pending"] is not None:
+        return
+    minutes = 0 if cancel else max(0, math.ceil((state["deadline"] - monotonic()) / 60)) + 15
+    # Native shutdown survives Kitty exiting and bypasses GUI quit confirmations.
+    # Only these fixed commands and an internally calculated integer run as root.
+    command = "/usr/bin/killall -q -u root shutdown; "
+    command += f"/sbin/shutdown -h +{minutes} >/dev/null 2>&1" if minutes else "true"
+    script = f"do shell script {json.dumps(command)} with administrator privileges"
+    try:
+        process = subprocess.Popen(
+            ["/usr/bin/osascript", "-e", script],
+            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT, text=True, start_new_session=True,
+        )
+    except OSError as error:
+        get_boss().show_error("Cannot change Mac shutdown", str(error))
+        return
+    state["pending"] = (process, minutes)
+    if state["timer"] is None:
+        state["timer"] = add_timer(refresh_shutdown, 1.0, True)
+    repaint_caffeine()
+
+
+def draw_timer_footer(bar, first_unused, top, active, label, action, controls, colors):
     screen = bar.screen
-    top = screen.lines - 3
     if top < first_unused or screen.columns < 12:
         return
-    state = caffeine_state()
-    active = state["process"] is not None
-    background = 0x25221D if active else 0x19202A
-    foreground = 0xEBC58D if active else 0xABB5C5
+    bottom = top + 3
+    background, foreground, accent = colors
     column = screen.columns - 6
     cursor = (screen.cursor.x, screen.cursor.y, screen.cursor.bg,
               screen.cursor.fg, screen.cursor.bold, screen.cursor.italic)
@@ -295,34 +267,53 @@ def draw_caffeine_footer(bar, first_unused):
         screen.cursor.fg = (foreground << 8) | 2
         screen.cursor.bold = active
         screen.cursor.italic = False
-        for row in range(top, screen.lines):
+        for row in range(top, bottom):
             screen.cursor.x, screen.cursor.y = 0, row
             screen.draw(" " * screen.columns)
-        remaining = max(1, math.ceil((state["deadline"] - monotonic()) / 60))
-        label = f"Awake · {remaining}m" if active else "Stay awake · 1h"
         if wcswidth(label) > column - 2:
             label = truncate_line(label, column - 2)
         screen.cursor.x, screen.cursor.y = max(1, (column - wcswidth(label)) // 2), top + 1
         screen.draw(label)
         screen.cursor.bold = False
-        for start, icon, action, color, button_bg in (
-            (column, "+", "caffeine", 0xEBC58D, 0x302A22 if active else 0x202733),
-            (column + 3, "■", "caffeine-stop", 0xD6A2A5 if active else 0x46505E, 0x2B2525 if active else 0x1C222C),
+        for start, icon, button_action, color, button_bg in (
+            (column, "+", action, accent, 0x302A22 if active else 0x202733),
+            (column + 3, "■", action + "-stop", 0xD6A2A5 if active else 0x46505E, 0x2B2525 if active else 0x1C222C),
         ):
             screen.cursor.bg = (button_bg << 8) | 2
             screen.cursor.fg = (color << 8) | 2
-            for row in range(top, screen.lines):
+            for row in range(top, bottom):
                 screen.cursor.x, screen.cursor.y = start, row
                 screen.draw(" " * 3)
             screen.cursor.x, screen.cursor.y = start + 1, top + 1
             screen.draw(icon)
-            if active or action == "caffeine":
-                bar._clawdex_caffeine_controls.append(((start, top, start + 3, screen.lines), action))
+            if active or button_action == action:
+                controls.append(((start, top, start + 3, bottom), button_action))
         if not active:
-            bar._clawdex_caffeine_controls.append(((0, top, column, screen.lines), "caffeine"))
+            controls.append(((0, top, column, bottom), action))
     finally:
         (screen.cursor.x, screen.cursor.y, screen.cursor.bg,
          screen.cursor.fg, screen.cursor.bold, screen.cursor.italic) = cursor
+
+
+def draw_caffeine_footer(bar, first_unused):
+    controls = bar._clawdex_caffeine_controls = []
+    shutdown = shutdown_state()
+    active = shutdown["deadline"] > monotonic()
+    remaining = max(1, math.ceil((shutdown["deadline"] - monotonic()) / 60))
+    label = "Authorizing…" if shutdown["pending"] else (f"Shutdown · {remaining}m" if active else "Shutdown · 15m")
+    draw_timer_footer(
+        bar, first_unused, bar.screen.lines - 6, active, label, "shutdown",
+        controls if shutdown["pending"] is None else [],
+        (0x2B2024 if active else 0x19202A, 0xD6A2A5 if active else 0xABB5C5, 0xD6A2A5),
+    )
+    state = caffeine_state()
+    active = state["process"] is not None
+    remaining = max(1, math.ceil((state["deadline"] - monotonic()) / 60))
+    draw_timer_footer(
+        bar, first_unused, bar.screen.lines - 3, active,
+        f"Awake · {remaining}m" if active else "Stay awake · 1h", "caffeine", controls,
+        (0x25221D if active else 0x19202A, 0xEBC58D if active else 0xABB5C5, 0xEBC58D),
+    )
 
 
 def icon_at(manager, x, y):
@@ -337,18 +328,19 @@ def icon_at(manager, x, y):
     tab_id = bar.tab_id_at(int(x), int(y))
     if bar.is_vertical and cell == getattr(manager, "_agent_close_hitboxes", {}).get(tab_id):
         return (tab_id, "close")
-    if cell == getattr(manager, "_agent_swap_hitboxes", {}).get(tab_id):
-        return (tab_id, "swap")
     return None
 
 
 def handle_tab_bar_mouse(manager, x, y, button, modifiers, action):
-    pending = getattr(manager, "_agent_swap_pressed", None)
+    pending = getattr(manager, "_sidebar_control_pressed", None)
     if pending is not None:
         if button == GLFW_MOUSE_BUTTON_LEFT and action == GLFW_RELEASE:
-            manager._agent_swap_pressed = None
+            manager._sidebar_control_pressed = None
             if not modifiers and icon_at(manager, x, y) == pending:
                 tab_id, control = pending
+                if control in ("shutdown", "shutdown-stop"):
+                    change_shutdown(cancel=control == "shutdown-stop")
+                    return
                 if control in ("caffeine", "caffeine-stop"):
                     if control == "caffeine-stop":
                         stop_caffeine()
@@ -356,17 +348,13 @@ def handle_tab_bar_mouse(manager, x, y, button, modifiers, action):
                         extend_caffeine()
                     return
                 tab = manager.tab_for_id(tab_id)
-                if tab is not None:
-                    if control == "close":
-                        get_boss().close_tab(tab)
-                    else:
-                        manager.set_active_tab(tab)
-                        swap_agent(tab)
+                if tab is not None and control == "close":
+                    get_boss().close_tab(tab)
         return
     if button == GLFW_MOUSE_BUTTON_LEFT and action == GLFW_PRESS and not modifiers:
         tab_id = icon_at(manager, x, y)
         if tab_id is not None:
-            manager._agent_swap_pressed = tab_id
+            manager._sidebar_control_pressed = tab_id
             manager.recent_tab_bar_mouse_events.clear()
             return
     return manager._agent_swap_original_mouse(x, y, button, modifiers, action)
@@ -379,7 +367,7 @@ TabManager.handle_tab_bar_mouse = handle_tab_bar_mouse
 
 
 # Kitty 0.49 inserts one blank row between vertical tabs. Compact that row
-# after native layout, moving both native click bounds and switch hitboxes.
+# after native layout, moving both native click bounds and close hitboxes.
 def compact_vertical_tabs(bar, data):
     # Native layout clears using the current background, which may be the
     # previously selected card's color. Begin with the sidebar canvas instead.
@@ -387,7 +375,7 @@ def compact_vertical_tabs(bar, data):
     changed = bar._agent_compact_original_vertical(data)
     extents = tuple(bar.tab_extents)
     manager = get_boss().os_window_map.get(bar.os_window_id)
-    hitboxes = getattr(manager, "_agent_swap_hitboxes", {})
+    close_hitboxes = getattr(manager, "_agent_close_hitboxes", {})
     compacted = []
     removed = 0
     previous_end = None
@@ -402,10 +390,9 @@ def compact_vertical_tabs(bar, data):
                 screen.delete_lines(min(gap, screen.lines - start))
                 removed += gap
         compacted.append(extent._replace(y=CellRange(extent.y.start - removed, extent.y.end - removed)))
-        for targets in (hitboxes, getattr(manager, "_agent_close_hitboxes", {})):
-            if extent.tab_id in targets:
-                x, y = targets[extent.tab_id]
-                targets[extent.tab_id] = (x, y - removed)
+        if extent.tab_id in close_hitboxes:
+            x, y = close_hitboxes[extent.tab_id]
+            close_hitboxes[extent.tab_id] = (x, y - removed)
         previous_end = extent.y.end
     bar.tab_extents = tuple(compacted)
     # Empty space is sidebar canvas, never an extension of the final card.

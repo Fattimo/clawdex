@@ -1392,7 +1392,7 @@ final class SpeechController {
         return (String(decoding: data, as: UTF8.self), offset + UInt64(data.count))
     }
 
-    /// Claude Code stays on the left; Codex stays on the right.
+    /// Mixed-provider boards pair by workspace; single-provider boards fill both columns.
     private func relayoutPills() {
         guard let pet = pet else { return }
         let badgeSpace = pills.values.contains { $0.badgeContent != nil } ? badgeGap + SubagentBadgeWindow.size : 0
@@ -1410,23 +1410,40 @@ final class SpeechController {
         let extras = pillOrder.filter { placements[$0] == nil }
         let rightExtras = extras.filter { pills[$0]?.agent == "codex" }.count
         let extraRows = max(rightExtras, extras.count - rightExtras)
-        let rows = pins.count + extraRows
+        var rows = pins.count + extraRows
+        var slots = placements
+        var emptySlots: [Int: (label: String, agent: String)] = [:]
+        if pills.count > 1, let agent = pills.values.first?.agent,
+           pills.values.allSatisfy({ $0.agent == agent }) {
+            let ordered = placements.sorted { $0.value < $1.value }.map(\.key) + extras
+            slots = Dictionary(uniqueKeysWithValues: ordered.enumerated().map { ($0.element, $0.offset) })
+            var next = slots.count
+            for (index, label) in pins.enumerated() where !occupied.contains(index * 2) && !occupied.contains(index * 2 + 1) {
+                emptySlots[next] = (label, agent)
+                next += 1
+            }
+            rows = (next + 1) / 2
+        } else {
+            for slot in 0..<(2 * pins.count) where !occupied.contains(slot) {
+                emptySlots[slot] = (pins[slot / 2], slot.isMultiple(of: 2) ? "claude" : "codex")
+            }
+        }
         pet.companionSideInset = rows == 0 ? 0 : CompanionLayout.sideInset(pet.frame) + badgeSpace
         pet.companionSessionInset = max(0, 10 + CGFloat(rows) * (PillWindow.height + CompanionLayout.rowGap) - CompanionLayout.rowGap - pet.frame.height)
         pet.constrainCompanionToScreen()
 
-        let vacant = Set(0..<(2 * pins.count)).subtracting(occupied)
+        let vacant = Set(emptySlots.keys)
         for slot in Set(vacantSlots.keys).subtracting(vacant) {
             if let window = vacantSlots.removeValue(forKey: slot) {
                 pet.removeChildWindow(window)
                 window.orderOut(nil)
             }
         }
-        for slot in vacant {
+        for (slot, entry) in emptySlots {
             let frame = CompanionLayout.sessionFrame(index: rows - 1 - slot / 2, pet: pet.frame, onLeft: slot.isMultiple(of: 2))
             let window = vacantSlots[slot] ?? PillWindow()
-            window.title = "\(pins[slot / 2]) · \(slot.isMultiple(of: 2) ? "Claude" : "Codex") · No session"
-            window.setContent(label: pins[slot / 2], lit: false, accent: .clear, fixedWidth: frame.width, vacant: true)
+            window.title = "\(entry.label) · \(entry.agent == "codex" ? "Codex" : "Claude") · No session"
+            window.setContent(label: entry.label, lit: false, accent: .clear, fixedWidth: frame.width, vacant: true)
             window.setFrameOrigin(frame.origin)
             if vacantSlots[slot] == nil {
                 window.ignoresMouseEvents = true
@@ -1438,19 +1455,17 @@ final class SpeechController {
         var sideRows: [Bool: Int] = [:]
         for source in pillOrder {
             guard let pill = pills[source] else { continue }
-            let left = pill.agent != "codex"
+            let left = slots[source]?.isMultiple(of: 2) ?? (pill.agent != "codex")
             let row: Int
-            let label: String
-            if let slot = placements[source] {
+            let label = placements[source].map { pins[$0 / 2] } ?? pill.label
+            if let slot = slots[source] {
                 row = rows - 1 - slot / 2
-                label = pins[slot / 2]
             } else {
                 row = sideRows[left, default: 0]
                 sideRows[left] = row + 1
-                label = pill.label
             }
             let frame = CompanionLayout.sessionFrame(index: row, pet: pet.frame, onLeft: left)
-            pill.window.title = "\(label) · \(left ? "Claude" : "Codex")"
+            pill.window.title = "\(label) · \(pill.agent == "codex" ? "Codex" : "Claude")"
             pill.size = pill.window.setContent(label: label, lit: pill.lit,
                 accent: color(for: source), fixedWidth: frame.width, neutral: pill.neutral)
             pill.window.setFrameOrigin(frame.origin)

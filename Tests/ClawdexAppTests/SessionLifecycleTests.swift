@@ -73,6 +73,36 @@ final class SessionLifecycleTests: XCTestCase {
         XCTAssertTrue(activePills(pet).isEmpty)
     }
 
+    func testSingleProviderBalancesLiveWorkspacesAndRestoresPairs() {
+        for agent in ["claude", "codex"] {
+            let pet = PetWindow()
+            var config = ClawdexConfig(messageVisibility: .none)
+            config.pinnedWorkspaces = ["app", "appcopy", "app3", "appcodex"]
+            let speech = SpeechController(pet: pet, config: config)
+            let clients = ["app3", "app", "extra"].enumerated().map { i, name in
+                KittySessionResolver.Client(window: String(i + 1), processID: 101 + i,
+                    agent: agent, root: "/tmp/" + name, tabTitle: name)
+            }
+            speech.reconcileKittySessions(clients, socket: socket)
+            settle()
+            let live = activePills(pet).filter { !$0.ignoresMouseEvents }
+            let sorted = live.sorted {
+                $0.frame.midY == $1.frame.midY ? $0.frame.midX < $1.frame.midX : $0.frame.midY > $1.frame.midY
+            }
+            XCTAssertEqual(sorted.compactMap { $0.contentView?.toolTip }, ["app", "app3", "extra"])
+            XCTAssertEqual(Set(live.map { $0.frame.midX }).count, 2)
+            XCTAssertEqual(activePills(pet).count, 5)
+            let other = KittySessionResolver.Client(window: "4", processID: 104,
+                agent: agent == "codex" ? "claude" : "codex", root: "/tmp/app", tabTitle: "app")
+            speech.reconcileKittySessions(clients + [other], socket: socket)
+            settle()
+            let pair = activePills(pet).filter { $0.contentView?.toolTip == "app" }
+            XCTAssertEqual(pair.count, 2)
+            XCTAssertEqual(Set(pair.map { $0.frame.midY }).count, 1)
+            XCTAssertEqual(activePills(pet).count, 9)
+        }
+    }
+
     func testClientRegistersBeforeHooksAndPresenceDoesNotResetBusyState() throws {
         let pet = PetWindow()
         let speech = SpeechController(pet: pet, config: ClawdexConfig(messageVisibility: .none))

@@ -1,13 +1,24 @@
 """Custom Kitty sidebar with session status and timer controls."""
 
+import fcntl
 import math
+import os
+import pty
+import re
+import select
+import struct
+import termios
 import json
 import subprocess
-from time import monotonic
+from pathlib import Path
+from shutil import which
+from threading import Thread, Timer
+from time import monotonic, time
 
 from kitty.fast_data_types import (
     add_timer,
     remove_timer,
+    os_window_is_invisible,
     GLFW_MOUSE_BUTTON_LEFT,
     GLFW_PRESS,
     GLFW_RELEASE,
@@ -198,61 +209,152 @@ def stop_caffeine():
     repaint_caffeine()
 
 
-def shutdown_state():
-    boss = get_boss()
-    state = getattr(boss, "_clawdex_shutdown", None)
-    if state is None:
-        state = {"deadline": 0, "timer": None, "pending": None}
-        boss._clawdex_shutdown = state
-    return state
+def claude_weekly_percent(output):
+    # Positioning escapes can separate words in the CLI's terminal rendering.
+    text = re.sub(rb"\x1b\[[0-?]*[ -/]*[@-~]", b" ", output)
+    match = re.search(rb"Current\s+week\s+\(all\s+models\)\s+"
+                      rb"[^\r\n%0-9]*(\d{1,3})%\s+used", text)
+    if match and int(match[1]) <= 100:
+        return int(match[1])
 
 
-def refresh_shutdown(timer_id):
-    state = shutdown_state()
-    pending = state["pending"]
-    if pending is not None:
-        process, minutes = pending
-        if process.poll() is not None:
-            output, _ = process.communicate()
-            state["pending"] = None
-            if process.returncode == 0:
-                state["deadline"] = monotonic() + minutes * 60 if minutes else 0
-            elif "(-128)" not in output:
-                # Authentication cancellation leaves the previous schedule intact.
-                # Other failures may occur after the previous timer was canceled.
-                state["deadline"] = 0
-                get_boss().show_error("Cannot change Mac shutdown", output.strip())
-    if state["pending"] is None and state["deadline"] <= monotonic():
-        state["deadline"] = 0
-        if state["timer"] is not None:
-            remove_timer(state["timer"])
-            state["timer"] = None
-    repaint_caffeine()
-
-
-def change_shutdown(cancel=False):
-    state = shutdown_state()
-    if state["pending"] is not None:
-        return
-    minutes = 0 if cancel else max(0, math.ceil((state["deadline"] - monotonic()) / 60)) + 15
-    # Native shutdown survives Kitty exiting and bypasses GUI quit confirmations.
-    # Only these fixed commands and an internally calculated integer run as root.
-    command = "/usr/bin/killall -q -u root shutdown; "
-    command += f"/sbin/shutdown -h +{minutes} >/dev/null 2>&1" if minutes else "true"
-    script = f"do shell script {json.dumps(command)} with administrator privileges"
+def fetch_claude_weekly(state):
+    binary = which("claude") or str(Path.home() / ".local/bin/claude")
+    # Ask the subscription CLI for its own usage, independent of API-key panes.
+    env = os.environ.copy()
+    for key in ("ANTHROPIC_API_KEY", "KITTY_WINDOW_ID", "KITTY_LISTEN_ON"):
+        env.pop(key, None)
     try:
-        process = subprocess.Popen(
-            ["/usr/bin/osascript", "-e", script],
-            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT, text=True, start_new_session=True,
-        )
-    except OSError as error:
-        get_boss().show_error("Cannot change Mac shutdown", str(error))
+        master, slave = pty.openpty()
+        try:
+            fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 40, 100, 0, 0))
+            with subprocess.Popen([binary, "--safe-mode", "--strict-mcp-config", "/usage"],
+                                  stdin=slave, stdout=slave, stderr=slave, env=env,
+                                  start_new_session=True) as client:
+                try:
+                    deadline = monotonic() + 15
+                    output = bytearray()
+                    while client.poll() is None and len(output) < 512_000:
+                        remaining = deadline - monotonic()
+                        if remaining <= 0:
+                            break
+                        if not select.select([master], [], [], min(1, remaining))[0]:
+                            continue
+                        output.extend(os.read(master, 65536))
+                        used = claude_weekly_percent(output)
+                        if used is not None:
+                            state["claude_cli"] = (used, time() + 900)
+                            break
+                finally:
+                    client.kill()
+        finally:
+            os.close(master)
+            os.close(slave)
+    except (OSError, ValueError):
+        pass
+
+
+def codex_weekly_window(result):
+    limits = (result.get("rateLimitsByLimitId") or {}).get("codex") or result.get("rateLimits") or {}
+    for key in ("primary", "secondary"):
+        window = limits.get(key) or {}
+        if window.get("windowDurationMins") == 7 * 24 * 60:
+            return window.get("usedPercent"), window.get("resetsAt")
+
+
+def fetch_codex_weekly(state):
+    # Run the signed-in CLI off the GUI thread. Only retain the weekly window.
+    binary = which("codex") or str(Path.home() / ".local/bin/codex")
+    try:
+        with subprocess.Popen([binary, "app-server"], stdin=subprocess.PIPE,
+                              stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True) as client:
+            timeout = Timer(15, client.kill)
+            timeout.start()
+            try:
+                def send(message):
+                    client.stdin.write(json.dumps(message) + "\n")
+                    client.stdin.flush()
+
+                send({"id": 1, "method": "initialize", "params": {
+                    "clientInfo": {"name": "clawdex-kitty", "version": "1"}}})
+                for line in client.stdout:
+                    reply = json.loads(line)
+                    if "error" in reply:
+                        break
+                    if reply.get("id") == 1:
+                        send({"method": "initialized"})
+                        send({"id": 2, "method": "account/rateLimits/read", "params": {}})
+                    elif reply.get("id") == 2:
+                        state["Codex"] = codex_weekly_window(reply["result"])
+                        break
+            finally:
+                client.kill()
+                timeout.cancel()
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+
+
+def refresh_usage(timer_id):
+    boss = get_boss()
+    state = boss._clawdex_usage
+    if not any(not os_window_is_invisible(window) for window in boss.os_window_map):
+        state["paused"] = True
         return
-    state["pending"] = (process, minutes)
-    if state["timer"] is None:
-        state["timer"] = add_timer(refresh_shutdown, 1.0, True)
+    resumed = state.pop("paused", False)
+    try:
+        state["CC"] = json.loads((Path.home() / ".clawdex/claude-weekly.json").read_text())
+    except (OSError, ValueError):
+        state["CC"] = None
+    now = monotonic()
+    for agent, fetch, interval in (("codex", fetch_codex_weekly, 180),
+                                   ("claude", fetch_claude_weekly, 600)):
+        worker = state.get(agent + "_worker")
+        if worker is not None and worker.is_alive():
+            continue
+        if resumed or now >= state.get(agent + "_due", 0):
+            state[agent + "_due"] = now + interval
+            worker = Thread(target=fetch, args=(state,), daemon=True)
+            state[agent + "_worker"] = worker
+            worker.start()
     repaint_caffeine()
+
+
+def draw_usage_footer(screen, first_unused):
+    top = screen.lines - 5
+    if top < first_unused or screen.columns < 12:
+        return
+    boss = get_boss()
+    if not hasattr(boss, "_clawdex_usage"):
+        boss._clawdex_usage = {}
+    state = boss._clawdex_usage
+    if state.get("timer_callback") is not refresh_usage:
+        if "usage_timer" in state:
+            remove_timer(state["usage_timer"])
+        state["timer_callback"] = refresh_usage
+        state["usage_timer"] = add_timer(refresh_usage, 5, True)
+        add_timer(refresh_usage, 0.1, False)
+    screen.cursor.bg = (0x101318 << 8) | 2
+    screen.cursor.bold = screen.cursor.italic = False
+    width = screen.columns - 5
+    for row, (label, color) in enumerate((("CC", 0xFF9230), ("Codex", 0x449FFF)), top):
+        window = boss._clawdex_usage.get(label)
+        native = boss._clawdex_usage.get("claude_cli")
+        if label == "CC" and native and native[1] > time():
+            window = native
+        used = None
+        if isinstance(window, (tuple, list)) and len(window) == 2:
+            value, reset = window
+            if (type(value) in (int, float) and 0 <= value <= 100
+                    and type(reset) in (int, float) and reset > time()):
+                used = value
+        filled = round(width * used / 100) if used is not None else 0
+        screen.cursor.x, screen.cursor.y = 0, row
+        screen.cursor.fg = (color << 8) | 2
+        value_text = f"{used:.0f}%" if used is not None else "—"
+        screen.draw(value_text.ljust(5))
+        screen.draw("█" * filled)
+        screen.cursor.fg = (0x445064 << 8) | 2
+        screen.draw("░" * (width - filled))
 
 
 def draw_timer_footer(bar, first_unused, top, active, label, action, controls, colors):
@@ -299,15 +401,10 @@ def draw_timer_footer(bar, first_unused, top, active, label, action, controls, c
 
 def draw_caffeine_footer(bar, first_unused):
     controls = bar._clawdex_caffeine_controls = []
-    shutdown = shutdown_state()
-    active = shutdown["deadline"] > monotonic()
-    remaining = max(1, math.ceil((shutdown["deadline"] - monotonic()) / 60))
-    label = "Authorizing…" if shutdown["pending"] else (f"Shutdown · {remaining}m" if active else "Shutdown · 15m")
-    draw_timer_footer(
-        bar, first_unused, bar.screen.lines - 6, active, label, "shutdown",
-        controls if shutdown["pending"] is None else [],
-        (0x2B2024 if active else 0x19202A, 0xD6A2A5 if active else 0xABB5C5, 0xD6A2A5),
-    )
+    cursor = bar.screen.cursor
+    saved = cursor.x, cursor.y, cursor.bg, cursor.fg, cursor.bold, cursor.italic
+    draw_usage_footer(bar.screen, first_unused)
+    cursor.x, cursor.y, cursor.bg, cursor.fg, cursor.bold, cursor.italic = saved
     state = caffeine_state()
     active = state["process"] is not None
     remaining = max(1, math.ceil((state["deadline"] - monotonic()) / 60))
@@ -342,9 +439,6 @@ def handle_tab_bar_mouse(manager, x, y, button, modifiers, action):
             manager._sidebar_control_pressed = None
             if not modifiers and icon_at(manager, x, y) == pending:
                 tab_id, control = pending
-                if control in ("shutdown", "shutdown-stop"):
-                    change_shutdown(cancel=control == "shutdown-stop")
-                    return
                 if control in ("caffeine", "caffeine-stop"):
                     if control == "caffeine-stop":
                         stop_caffeine()

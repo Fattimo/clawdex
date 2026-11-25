@@ -14,6 +14,18 @@
 SOCK="${CLAWDEX_SOCK:-$HOME/.clawdex/sock}"
 PAYLOAD="$(cat)"
 
+# Keep the latest reported weekly window for Kitty, including across /clear.
+CACHE="$HOME/.clawdex/claude-weekly.json"
+WEEKLY="$(printf '%s' "$PAYLOAD" | jq -c '
+  .rate_limits.seven_day | select(type == "object")
+  | select((.used_percentage | type) == "number" and (.resets_at | type) == "number")
+  | [.used_percentage, .resets_at]' 2>/dev/null)"
+if [ -n "$WEEKLY" ] && [ "$WEEKLY" != "$(cat "$CACHE" 2>/dev/null)" ]; then
+  if temp="$(mktemp "${CACHE}.XXXXXX")"; then
+    printf '%s\n' "$WEEKLY" > "$temp" && mv -f "$temp" "$CACHE"
+  fi
+fi
+
 # Best-effort heartbeat — fire and forget. Daemon uses this to detect that
 # the agent is still alive (vs crashed mid-tool-call leaving us stuck on row 7).
 if [ -S "$SOCK" ]; then

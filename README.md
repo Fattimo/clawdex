@@ -82,15 +82,13 @@ sidebar dots follow the same order. To keep those rows visible in the Clawdex
 switchboard, set `"pinnedWorkspaces": ["app", "appcopy", "app3", "appcodex"]`
 in `~/.clawdex/config.json`.
 
-The sidebar footer has a Mac shutdown timer above Stay awake. Click its label or
-`+` to schedule shutdown in 15 minutes; each additional `+` adds 15 minutes.
-`■` cancels it with `killall shutdown`. Scheduling, extending, and canceling use
-the macOS administrator prompt. This uses system shutdown, which closes Kitty
-without its quit confirmation and can discard unsaved work in apps. The shutdown
-survives Kitty exiting; its sidebar countdown is only tracked for the current
-Kitty instance. After restarting Kitty, cancel an existing schedule from Terminal
-with `sudo /usr/bin/killall shutdown` before setting a new one. Setting a new timer
-also replaces any existing system shutdown schedule.
+The sidebar shows weekly quota used above Stay awake. Orange tracks Claude Code
+and blue tracks Codex. A dash means the CLI has yet to report a current weekly
+window. Kitty reads Claude’s subscription usage from its built-in `/usage` screen every
+ten minutes, including in checkouts with their own HUD. The Clawdex status-line
+hook also supplies usage when available.
+Kitty reads Codex limits from the signed-in CLI every three minutes. Both checks pause while all Kitty windows are hidden
+and refresh when a window becomes visible again.
 
 ## Install
 

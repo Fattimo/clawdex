@@ -88,7 +88,10 @@ window. Kitty reads Claude’s subscription usage from its built-in `/usage` scr
 ten minutes, including in checkouts with their own HUD. The Clawdex status-line
 hook also supplies usage when available.
 Kitty reads Codex limits from the signed-in CLI every three minutes. Both checks pause while all Kitty windows are hidden
-and refresh when a window becomes visible again.
+and refresh when a window becomes visible again. Click the minus beside either
+bar to hide that agent across paired tabs in the window. Click its plus to
+restore the splits. Hidden sessions keep running. The × beside each toggle closes that agent’s
+terminals in paired tabs after confirmation, including hidden panes.
 
 ## Install
 

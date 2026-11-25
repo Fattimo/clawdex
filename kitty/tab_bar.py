@@ -319,7 +319,76 @@ def refresh_usage(timer_id):
     repaint_caffeine()
 
 
-def draw_usage_footer(screen, first_unused):
+def paired_agent_windows(tab):
+    if tab.windows.num_groups != 2 or len(tab) != 2:
+        return {}
+    panes = {}
+    for window in tab:
+        provider = window.user_vars.get("clawdex_status", "").partition(":")[0] or window.title.lower()
+        panes[provider] = window
+    return panes if panes.keys() == {"claude", "codex"} else {}
+
+
+def close_agent_panes(manager, agent):
+    targets = {}
+    for tab in manager.tabs:
+        panes = paired_agent_windows(tab)
+        if panes:
+            targets[tab.id] = panes[agent].id
+    boss = get_boss()
+    if not targets:
+        boss.show_error("Close terminals", "No paired agent terminals in this window.")
+        return
+
+    def close_confirmed(confirmed):
+        if not confirmed:
+            return
+        saved = getattr(manager, "_clawdex_split_views", {})
+        for tab in manager.tabs:
+            if tab.id not in targets:
+                continue
+            pane = paired_agent_windows(tab).get(agent)
+            if pane is None or pane.id != targets[tab.id]:
+                continue
+            if tab.id in saved:
+                layout, _ = saved.pop(tab.id)
+                tab.goto_layout(layout)
+            boss.mark_window_for_close(pane)
+        if not saved:
+            manager._clawdex_hidden_agent = None
+        manager.mark_tab_bar_dirty()
+
+    name = "Claude" if agent == "claude" else "Codex"
+    count = len(targets)
+    noun = "terminal" if count == 1 else "terminals"
+    boss.confirm(f"Close {count} {name} {noun} in this window? This ends their running sessions.",
+                 close_confirmed, window=manager.active_tab.active_window)
+
+
+def toggle_agent_panes(manager, agent):
+    saved = getattr(manager, "_clawdex_split_views", {})
+    hidden = None if getattr(manager, "_clawdex_hidden_agent", None) == agent else agent
+    for tab in manager.tabs:
+        if hidden is None:
+            if tab.id in saved:
+                layout, focus = saved[tab.id]
+                tab.goto_layout(layout)
+                original = next((w for w in tab if w.id == focus), None)
+                if original is not None:
+                    tab.set_active_window(original)
+            continue
+        panes = paired_agent_windows(tab)
+        if not panes or "stack" not in tab.enabled_layouts:
+            continue
+        saved.setdefault(tab.id, (tab.current_layout.full_name, tab.active_window.id))
+        tab.set_active_window(panes["codex" if hidden == "claude" else "claude"])
+        tab.goto_layout("stack")
+    manager._clawdex_split_views = saved if hidden else {}
+    manager._clawdex_hidden_agent = hidden if manager._clawdex_split_views else None
+    manager.mark_tab_bar_dirty()
+
+
+def draw_usage_footer(screen, first_unused, controls, hidden):
     top = screen.lines - 5
     if top < first_unused or screen.columns < 12:
         return
@@ -335,8 +404,9 @@ def draw_usage_footer(screen, first_unused):
         add_timer(refresh_usage, 0.1, False)
     screen.cursor.bg = (0x101318 << 8) | 2
     screen.cursor.bold = screen.cursor.italic = False
-    width = screen.columns - 5
+    width = screen.columns - 11
     for row, (label, color) in enumerate((("CC", 0xFF9230), ("Codex", 0x449FFF)), top):
+        screen.cursor.bg = (0x101318 << 8) | 2
         window = boss._clawdex_usage.get(label)
         native = boss._clawdex_usage.get("claude_cli")
         if label == "CC" and native and native[1] > time():
@@ -355,6 +425,15 @@ def draw_usage_footer(screen, first_unused):
         screen.draw("█" * filled)
         screen.cursor.fg = (0x445064 << 8) | 2
         screen.draw("░" * (width - filled))
+        agent = "claude" if label == "CC" else "codex"
+        screen.cursor.bg = (0x202733 << 8) | 2
+        screen.cursor.fg = (color << 8) | 2
+        screen.draw(" + " if hidden == agent else " − ")
+        controls.append(((screen.columns - 6, row, screen.columns - 3, row + 1), "toggle-" + agent))
+        screen.cursor.bg = (0x30252B << 8) | 2
+        screen.cursor.fg = (0xE4A5AB << 8) | 2
+        screen.draw(" × ")
+        controls.append(((screen.columns - 3, row, screen.columns, row + 1), "close-" + agent))
 
 
 def draw_timer_footer(bar, first_unused, top, active, label, action, controls, colors):
@@ -403,7 +482,8 @@ def draw_caffeine_footer(bar, first_unused):
     controls = bar._clawdex_caffeine_controls = []
     cursor = bar.screen.cursor
     saved = cursor.x, cursor.y, cursor.bg, cursor.fg, cursor.bold, cursor.italic
-    draw_usage_footer(bar.screen, first_unused)
+    manager = get_boss().os_window_map.get(bar.os_window_id)
+    draw_usage_footer(bar.screen, first_unused, controls, getattr(manager, "_clawdex_hidden_agent", None))
     cursor.x, cursor.y, cursor.bg, cursor.fg, cursor.bold, cursor.italic = saved
     state = caffeine_state()
     active = state["process"] is not None
@@ -439,6 +519,12 @@ def handle_tab_bar_mouse(manager, x, y, button, modifiers, action):
             manager._sidebar_control_pressed = None
             if not modifiers and icon_at(manager, x, y) == pending:
                 tab_id, control = pending
+                if control in ("close-claude", "close-codex"):
+                    close_agent_panes(manager, control[6:])
+                    return
+                if control in ("toggle-claude", "toggle-codex"):
+                    toggle_agent_panes(manager, control[7:])
+                    return
                 if control in ("caffeine", "caffeine-stop"):
                     if control == "caffeine-stop":
                         stop_caffeine()
@@ -457,6 +543,7 @@ def handle_tab_bar_mouse(manager, x, y, button, modifiers, action):
             return
         tab = manager.active_tab
         if (manager.tab_bar.is_vertical and tab is not None and tab.windows.num_groups == 2
+                and tab.id not in getattr(manager, "_clawdex_split_views", {})
                 and manager.tab_bar.tab_id_at(int(x), int(y)) == tab.id):
             manager._pane_cycle_tab = tab.id
     elif button == GLFW_MOUSE_BUTTON_LEFT and action == GLFW_RELEASE:

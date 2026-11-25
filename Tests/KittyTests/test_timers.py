@@ -36,13 +36,13 @@ class SidebarTimerTests(unittest.TestCase):
     def bar(self, columns=24):
         cursor = SimpleNamespace(x=0, y=0, fg=0, bg=0, bold=False, italic=False)
         screen = SimpleNamespace(lines=20, columns=columns, cursor=cursor, draw=Mock())
-        return SimpleNamespace(screen=screen)
+        return SimpleNamespace(screen=screen, os_window_id=1)
 
     def test_footer_hitboxes_and_crowded_sidebar(self):
         bar = self.bar()
         self.env["draw_caffeine_footer"](bar, 10)
         controls = bar._clawdex_caffeine_controls
-        self.assertEqual({action for _, action in controls}, {"caffeine"})
+        self.assertEqual({action for _, action in controls}, {"caffeine", "toggle-claude", "toggle-codex", "close-claude", "close-codex"})
         self.assertIn(((18, 17, 21, 20), "caffeine"), controls)
         drawn = "".join(call.args[0] for call in bar.screen.draw.call_args_list)
         for label in ("Weekly used", "CC", "Codex"):
@@ -55,12 +55,36 @@ class SidebarTimerTests(unittest.TestCase):
         self.env["time"] = lambda: 1000
         self.boss._clawdex_usage = {"CC": [0, 2000], "Codex": (100, 2000)}
         bar = self.bar()
-        self.env["draw_usage_footer"](bar.screen, 0)
+        self.env["draw_usage_footer"](bar.screen, 0, [], None)
         rows = "".join(call.args[0] for call in bar.screen.draw.call_args_list)
-        self.assertEqual(rows, "0%   " + "░" * 19 + "100% " + "█" * 19)
+        self.assertEqual(rows, "0%   " + "░" * 13 + " −  × 100% " + "█" * 13 + " −  × ")
         self.boss._clawdex_usage["CC"] = [75, 999]
-        self.env["draw_usage_footer"](bar.screen, 0)
+        self.env["draw_usage_footer"](bar.screen, 0, [], None)
         bar.screen.draw.assert_any_call("—    ")
+
+    def test_close_only_confirmed_original_provider_windows(self):
+        class Tab(list):
+            id = 1
+            windows = SimpleNamespace(num_groups=2)
+
+        def pane(name, pane_id):
+            return SimpleNamespace(user_vars={}, title=name, id=pane_id)
+
+        tab = Tab([pane("Claude", 7), pane("Codex", 8)])
+        tab.active_window = tab[1]
+        manager = SimpleNamespace(tabs=[tab], active_tab=tab, mark_tab_bar_dirty=Mock())
+        self.boss.mark_window_for_close = Mock()
+        self.boss.confirm = Mock()
+        self.env["close_agent_panes"](manager, "claude")
+        confirm = self.boss.confirm.call_args.args[1]
+        confirm(False)
+        self.boss.mark_window_for_close.assert_not_called()
+        tab[0] = pane("Claude", 9)
+        confirm(True)
+        self.boss.mark_window_for_close.assert_not_called()
+        self.env["close_agent_panes"](manager, "claude")
+        self.boss.confirm.call_args.args[1](True)
+        self.boss.mark_window_for_close.assert_called_once_with(tab[0])
 
     def test_claude_usage_matches_only_all_models_week(self):
         parse = self.env["claude_weekly_percent"]

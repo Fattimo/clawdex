@@ -91,7 +91,8 @@ Kitty reads Codex limits from the signed-in CLI every three minutes. Both checks
 and refresh when a window becomes visible again. Click the minus beside either
 bar to hide that agent across paired tabs in the window. Click its plus to
 restore the splits. Hidden sessions keep running. The × beside each toggle closes that agent’s
-terminals in paired tabs after confirmation, including hidden panes.
+terminals in paired tabs after confirmation, including hidden panes. When a configured workspace is missing that agent, the
+rightmost button becomes + and restores the missing panes using their startup commands.
 
 ## Install
 

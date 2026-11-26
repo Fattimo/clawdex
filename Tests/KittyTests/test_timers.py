@@ -2,6 +2,8 @@
 
 import ast
 import json
+from functools import lru_cache
+from copy import copy
 import math
 import re
 from pathlib import Path
@@ -25,7 +27,7 @@ class SidebarTimerTests(unittest.TestCase):
         self.process.communicate.return_value = ("", None)
         self.spawn = Mock(return_value=self.process)
         self.env = dict(
-            re=re, json=json, math=math, monotonic=Mock(return_value=1000),
+            lru_cache=lru_cache, copy=copy, re=re, json=json, math=math, monotonic=Mock(return_value=1000),
             get_boss=lambda: self.boss, add_timer=Mock(return_value=7),
             remove_timer=Mock(), wcswidth=len, truncate_line=lambda s, n: s[:n],
             subprocess=SimpleNamespace(Popen=self.spawn, DEVNULL=subprocess.DEVNULL,
@@ -85,6 +87,31 @@ class SidebarTimerTests(unittest.TestCase):
         self.env["close_agent_panes"](manager, "claude")
         self.boss.confirm.call_args.args[1](True)
         self.boss.mark_window_for_close.assert_called_once_with(tab[0])
+
+    def test_remount_only_missing_configured_panes_once(self):
+        class Tab(list):
+            def __init__(self, title, agents):
+                super().__init__([SimpleNamespace(title=a, user_vars={}) for a in agents])
+                self.effective_title = title
+                self.active_window = self[0]
+                self.goto_layout = Mock()
+                self.set_active_window = Mock()
+
+        app = Tab("● app", ["Codex"])
+        other = Tab("clawdex", ["Codex"])
+        spec = SimpleNamespace(opts=SimpleNamespace(location="default"), args=["zsh"])
+        self.env["workspace_launches"] = lambda: {"app": {"claude": spec, "codex": spec}}
+        manager = SimpleNamespace(tabs=[app, other], mark_tab_bar_dirty=Mock())
+        def launch(boss, opts, args, target_tab, force_target_tab):
+            self.assertIs(target_tab, app)
+            self.assertEqual(opts.location, "first")
+            target_tab.append(SimpleNamespace(title="Claude", user_vars={}))
+            return target_tab[-1]
+        self.env["launch"] = Mock(side_effect=launch)
+        self.env["remount_agent_panes"](manager, "claude")
+        self.env["remount_agent_panes"](manager, "claude")
+        self.env["launch"].assert_called_once()
+        self.assertEqual(spec.opts.location, "default")
 
     def test_usage_uses_trusted_open_checkout(self):
         self.env["Path"] = Path

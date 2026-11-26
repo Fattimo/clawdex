@@ -10,6 +10,8 @@ import struct
 import termios
 import json
 import subprocess
+from functools import lru_cache
+from copy import copy
 from pathlib import Path
 from shutil import which
 from threading import Thread, Timer
@@ -23,12 +25,16 @@ from kitty.fast_data_types import (
     GLFW_PRESS,
     GLFW_RELEASE,
     get_boss,
+    get_options,
     get_tab_being_dragged,
     set_tab_being_dragged,
 )
 from kitty.tab_bar import draw_tab_with_powerline, truncate_line, TabBar, CellRange
 from kitty.fast_data_types import wcswidth
 from kitty.tabs import TabManager
+from kitty.constants import config_dir
+from kitty.launch import launch
+from kitty.session import parse_session
 
 
 def paired_status(tab):
@@ -339,13 +345,72 @@ def refresh_usage(timer_id):
     repaint_caffeine()
 
 
+def pane_provider(window):
+    return window.user_vars.get("clawdex_status", "").partition(":")[0] or window.title.lower()
+
+
+@lru_cache(maxsize=1)
+def workspace_launches():
+    path = Path(config_dir) / "claude.session"
+    recipes = {}
+    try:
+        for session in parse_session(path.read_text(), get_options(), session_path=str(path)):
+            for tab in session.tabs:
+                if len(tab.windows) != 2:
+                    continue
+                pair = {}
+                for window in tab.windows:
+                    spec = window.launch_spec
+                    if spec and spec.opts.type == "window":
+                        pair[(spec.opts.window_title or "").lower()] = spec
+                if pair.keys() == {"claude", "codex"}:
+                    recipes[tab.name] = pair
+    except (OSError, ValueError):
+        pass
+    return recipes
+
+
+def missing_agent_panes(manager):
+    missing = {"claude": [], "codex": []}
+    if manager is None:
+        return missing
+    recipes = workspace_launches()
+    for tab in manager.tabs:
+        if len(tab) != 1:
+            continue
+        name = re.sub(r"^[●○◉◐◑] ", "", tab.effective_title)
+        pair = recipes.get(name)
+        if pair is None:
+            continue
+        survivor = pane_provider(tab.active_window)
+        if survivor in pair:
+            agent = "codex" if survivor == "claude" else "claude"
+            missing[agent].append((tab, pair[agent]))
+    return missing
+
+
+def remount_agent_panes(manager, agent):
+    for tab, spec in missing_agent_panes(manager)[agent]:
+        opts = copy(spec.opts)
+        opts.location = "first" if agent == "claude" else "last"
+        original = tab.active_window
+        try:
+            pane = launch(get_boss(), opts, spec.args, target_tab=tab, force_target_tab=True)
+            if pane is None:
+                raise RuntimeError("Kitty did not create the terminal.")
+            tab.goto_layout("horizontal")
+            tab.set_active_window(original)
+        except Exception as error:
+            get_boss().show_error("Cannot remount terminal", f"{tab.title}: {error}")
+    manager.mark_tab_bar_dirty()
+
+
 def paired_agent_windows(tab):
     if tab.windows.num_groups != 2 or len(tab) != 2:
         return {}
     panes = {}
     for window in tab:
-        provider = window.user_vars.get("clawdex_status", "").partition(":")[0] or window.title.lower()
-        panes[provider] = window
+        panes[pane_provider(window)] = window
     return panes if panes.keys() == {"claude", "codex"} else {}
 
 
@@ -408,7 +473,7 @@ def toggle_agent_panes(manager, agent):
     manager.mark_tab_bar_dirty()
 
 
-def draw_usage_footer(screen, first_unused, controls, hidden):
+def draw_usage_footer(screen, first_unused, controls, manager):
     top = screen.lines - 5
     if top < first_unused or screen.columns < 12:
         return
@@ -424,6 +489,8 @@ def draw_usage_footer(screen, first_unused, controls, hidden):
         add_timer(refresh_usage, 0.1, False)
     screen.cursor.bg = (0x101318 << 8) | 2
     screen.cursor.bold = screen.cursor.italic = False
+    hidden = getattr(manager, "_clawdex_hidden_agent", None)
+    missing = missing_agent_panes(manager)
     width = screen.columns - 11
     for row, (label, color) in enumerate((("CC", 0xFF9230), ("Codex", 0x449FFF)), top):
         screen.cursor.bg = (0x101318 << 8) | 2
@@ -452,8 +519,15 @@ def draw_usage_footer(screen, first_unused, controls, hidden):
         controls.append(((screen.columns - 6, row, screen.columns - 3, row + 1), "toggle-" + agent))
         screen.cursor.bg = (0x30252B << 8) | 2
         screen.cursor.fg = (0xE4A5AB << 8) | 2
-        screen.draw(" × ")
-        controls.append(((screen.columns - 3, row, screen.columns, row + 1), "close-" + agent))
+        if missing[agent]:
+            screen.cursor.bg = (0x202733 << 8) | 2
+            screen.cursor.fg = (color << 8) | 2
+            screen.draw(" + ")
+            action = "remount-" + agent
+        else:
+            screen.draw(" × ")
+            action = "close-" + agent
+        controls.append(((screen.columns - 3, row, screen.columns, row + 1), action))
 
 
 def draw_timer_footer(bar, first_unused, top, active, label, action, controls, colors):
@@ -503,7 +577,7 @@ def draw_caffeine_footer(bar, first_unused):
     cursor = bar.screen.cursor
     saved = cursor.x, cursor.y, cursor.bg, cursor.fg, cursor.bold, cursor.italic
     manager = get_boss().os_window_map.get(bar.os_window_id)
-    draw_usage_footer(bar.screen, first_unused, controls, getattr(manager, "_clawdex_hidden_agent", None))
+    draw_usage_footer(bar.screen, first_unused, controls, manager)
     cursor.x, cursor.y, cursor.bg, cursor.fg, cursor.bold, cursor.italic = saved
     state = caffeine_state()
     active = state["process"] is not None
@@ -539,6 +613,9 @@ def handle_tab_bar_mouse(manager, x, y, button, modifiers, action):
             manager._sidebar_control_pressed = None
             if not modifiers and icon_at(manager, x, y) == pending:
                 tab_id, control = pending
+                if control in ("remount-claude", "remount-codex"):
+                    remount_agent_panes(manager, control[8:])
+                    return
                 if control in ("close-claude", "close-codex"):
                     close_agent_panes(manager, control[6:])
                     return
